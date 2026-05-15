@@ -1,472 +1,364 @@
-// ── Constants ──
 const COLORS = ['#ff6b00','#ff9500','#ffb347','#e63946','#2a9d8f','#457b9d','#6a4c93','#f72585','#80b918','#9b2226'];
-const O = '#ff8c00', O2 = '#ffaa33';
-const DB_KEY = 'tampolas-db';
-const SCREENS = { HOME: 'home', LIST: 'list', ADD: 'add', DETAIL: 'detail' };
-
-// ── State ──
-let state = {
-  caps: [],
-  screen: SCREENS.HOME,
-  filter: 'all',
-  search: '',
-  selectedId: null,
-  editing: null,
-  form: { name: '', brand: '', country: '', color: O, notes: '', quantity: 1, photo: null },
-  toast: null,
+const O = '#ff8c00';
+const S = { HOME:'home', LIST:'list', ADD:'add', DETAIL:'detail' };
+const T = {
+  bg:'#141210', card:'#1e1a16', card2:'#252018', border:'#2e2618',
+  text:'#fff4e8', muted:'#7a6a58', dim:'#3a3028',
+  green:'#22c55e', gBg:'#052010', gBorder:'#0a4020',
+  red:'#ef4444',   rBg:'#200505', rBorder:'#401010',
+  o2:'#ffaa33',
 };
 
-// ── DB (IndexedDB for larger storage with photos) ──
+// ── State ──
+let st = {
+  caps:[], scr:S.HOME, filter:'all', q:'',
+  selId:null, edit:null,
+  form:{name:'',brand:'',country:'',color:O,notes:'',quantity:1,photo:null,owned:true},
+  toast:null,
+};
+
+// ── IndexedDB ──
 let db;
-
 function openDB() {
-  return new Promise((resolve, reject) => {
-    const req = indexedDB.open('TampolasDB', 1);
-    req.onupgradeneeded = e => {
-      e.target.result.createObjectStore('caps', { keyPath: 'id' });
-    };
-    req.onsuccess = e => { db = e.target.result; resolve(); };
-    req.onerror = () => reject();
+  return new Promise((res,rej)=>{
+    const r = indexedDB.open('TampolasDB',1);
+    r.onupgradeneeded = e => e.target.result.createObjectStore('caps',{keyPath:'id'});
+    r.onsuccess = e => { db=e.target.result; res(); };
+    r.onerror = rej;
   });
 }
-
-function dbGetAll() {
-  return new Promise((resolve) => {
-    const tx = db.transaction('caps', 'readonly');
-    const req = tx.objectStore('caps').getAll();
-    req.onsuccess = () => resolve(req.result || []);
-    req.onerror = () => resolve([]);
-  });
-}
-
-function dbPut(cap) {
-  return new Promise((resolve) => {
-    const tx = db.transaction('caps', 'readwrite');
-    tx.objectStore('caps').put(cap);
-    tx.oncomplete = resolve;
-  });
-}
-
-function dbDelete(id) {
-  return new Promise((resolve) => {
-    const tx = db.transaction('caps', 'readwrite');
-    tx.objectStore('caps').delete(id);
-    tx.oncomplete = resolve;
-  });
-}
+const dbAll = () => new Promise(res=>{ const r=db.transaction('caps','readonly').objectStore('caps').getAll(); r.onsuccess=()=>res(r.result||[]); r.onerror=()=>res([]); });
+const dbPut = c  => new Promise(res=>{ const tx=db.transaction('caps','readwrite'); tx.objectStore('caps').put(c); tx.oncomplete=res; });
+const dbDel = id => new Promise(res=>{ const tx=db.transaction('caps','readwrite'); tx.objectStore('caps').delete(id); tx.oncomplete=res; });
 
 // ── Helpers ──
-function genId() { return Date.now().toString(36) + Math.random().toString(36).slice(2); }
+const uid   = () => Date.now().toString(36)+Math.random().toString(36).slice(2);
+const set   = patch => { st={...st,...patch}; render(); };
+const setF  = patch => set({form:{...st.form,...patch}});
+const go    = scr  => { st={...st,scr}; render(); window.scrollTo(0,0); };
 
-function setState(patch) {
-  state = { ...state, ...patch };
-  render();
+function toast_(msg,type='ok'){
+  set({toast:{msg,type}});
+  setTimeout(()=>set({toast:null}),2500);
 }
-
-function showToast(msg, type = 'ok') {
-  setState({ toast: { msg, type } });
-  setTimeout(() => setState({ toast: null }), 2500);
-}
-
-function go(screen) { setState({ screen }); window.scrollTo(0, 0); }
-
-// ── Computed ──
-function getFiltered() {
-  const q = state.search.toLowerCase();
-  return state.caps.filter(c => {
-    const ms = !q || c.name.toLowerCase().includes(q) || (c.brand||'').toLowerCase().includes(q) || (c.country||'').toLowerCase().includes(q);
-    const mf = state.filter === 'all' || (state.filter === 'owned' && c.owned) || (state.filter === 'missing' && !c.owned);
-    return ms && mf;
-  });
-}
-
-function getSelected() { return state.caps.find(c => c.id === state.selectedId); }
 
 // ── Actions ──
-async function saveCap() {
-  const { form, editing, caps } = state;
-  if (!form.name.trim()) return showToast('Nome obrigatório!', 'err');
-
-  if (editing) {
-    const updated = caps.map(c => c.id === editing ? { ...c, ...form } : c);
-    const cap = updated.find(c => c.id === editing);
-    await dbPut(cap);
-    setState({ caps: updated, editing: null });
-    showToast('Tampola atualizada!');
-    go(SCREENS.DETAIL);
+async function saveCap(){
+  const {form,edit,caps}=st;
+  if(!form.name.trim()) return toast_('Nome obrigatório!','err');
+  if(edit){
+    const updated=caps.map(c=>c.id===edit?{...c,...form}:c);
+    await dbPut(updated.find(c=>c.id===edit));
+    set({caps:updated,edit:null});
+    toast_('Atualizada!'); go(S.DETAIL);
   } else {
-    if (caps.find(c => c.name.toLowerCase() === form.name.toLowerCase())) return showToast('Já existe!', 'err');
-    const newCap = { id: genId(), ...form, owned: true, addedAt: new Date().toLocaleDateString('pt-BR') };
-    await dbPut(newCap);
-    setState({ caps: [...caps, newCap], editing: null });
-    showToast('Tampola adicionada!');
-    go(SCREENS.LIST);
+    if(caps.find(c=>c.name.toLowerCase()===form.name.toLowerCase())) return toast_('Já existe!','err');
+    const cap={id:uid(),...form,addedAt:new Date().toLocaleDateString('pt-BR')};
+    await dbPut(cap);
+    set({caps:[...caps,cap],edit:null});
+    toast_('Adicionada!'); go(S.LIST);
   }
 }
 
-async function deleteCap(id) {
-  if (!confirm('Remover esta tampola?')) return;
-  await dbDelete(id);
-  setState({ caps: state.caps.filter(c => c.id !== id) });
-  showToast('Removida.', 'info');
-  go(SCREENS.LIST);
+async function delCap(id){
+  if(!confirm('Remover esta tampola?')) return;
+  await dbDel(id);
+  set({caps:st.caps.filter(c=>c.id!==id)});
+  toast_('Removida.','info'); go(S.LIST);
 }
 
-async function toggleOwned(id) {
-  const caps = state.caps.map(c => c.id === id ? { ...c, owned: !c.owned } : c);
-  const cap = caps.find(c => c.id === id);
-  await dbPut(cap);
-  setState({ caps });
+async function toggleOwned(id){
+  const caps=st.caps.map(c=>c.id===id?{...c,owned:!c.owned}:c);
+  await dbPut(caps.find(c=>c.id===id));
+  set({caps});
 }
 
-function openAdd() {
-  setState({ editing: null, form: { name: '', brand: '', country: '', color: O, notes: '', quantity: 1, photo: null } });
-  go(SCREENS.ADD);
+function openAdd(){
+  set({edit:null,form:{name:'',brand:'',country:'',color:O,notes:'',quantity:1,photo:null,owned:true}});
+  go(S.ADD);
 }
 
-function openEdit(cap) {
-  setState({ editing: cap.id, form: { name: cap.name, brand: cap.brand||'', country: cap.country||'', color: cap.color, notes: cap.notes||'', quantity: cap.quantity||1, photo: cap.photo||null } });
-  go(SCREENS.ADD);
+function openEdit(cap){
+  set({edit:cap.id,form:{name:cap.name,brand:cap.brand||'',country:cap.country||'',color:cap.color,notes:cap.notes||'',quantity:cap.quantity||1,photo:cap.photo||null,owned:cap.owned}});
+  go(S.ADD);
 }
 
-function openDetail(id) {
-  setState({ selectedId: id });
-  go(SCREENS.DETAIL);
+function loadPhoto(file){
+  if(!file) return;
+  const r=new FileReader();
+  r.onload=e=>setF({photo:e.target.result});
+  r.readAsDataURL(file);
 }
 
-// ── Photo handling ──
-function handlePhoto(file) {
-  if (!file) return;
-  const reader = new FileReader();
-  reader.onload = e => setState({ form: { ...state.form, photo: e.target.result } });
-  reader.readAsDataURL(file);
+// ── HTML builders ──
+function avatar(cap,sz=48){
+  const shadow=`box-shadow:0 0 14px ${cap.color}44`;
+  if(cap.photo) return `<div style="width:${sz}px;height:${sz}px;border-radius:50%;overflow:hidden;border:2px solid rgba(255,255,255,.08);${shadow};flex-shrink:0"><img src="${cap.photo}" style="width:100%;height:100%;object-fit:cover"/></div>`;
+  return `<div style="width:${sz}px;height:${sz}px;border-radius:50%;background:${cap.color};display:flex;align-items:center;justify-content:center;font-size:${sz*.44}px;border:2px solid rgba(255,255,255,.08);${shadow};flex-shrink:0">🍺</div>`;
 }
 
-// ── Render helpers ──
-function capAvatarHTML(cap, size = 48, fontSize = 22) {
-  if (cap.photo) {
-    return `<div class="cap-avatar" style="width:${size}px;height:${size}px;box-shadow:0 0 14px ${cap.color}55"><img src="${cap.photo}" alt="${cap.name}" /></div>`;
-  }
-  return `<div class="cap-avatar" style="width:${size}px;height:${size}px;background:${cap.color};font-size:${fontSize}px;box-shadow:0 0 14px ${cap.color}55">🍺</div>`;
+function badge(cap){
+  return `<span style="padding:5px 10px;border-radius:20px;font-size:11px;font-weight:800;letter-spacing:.8px;background:${cap.owned?T.gBg:T.rBg};color:${cap.owned?T.green:T.red};border:1.5px solid ${cap.owned?T.gBorder:T.rBorder};flex-shrink:0">${cap.owned?'✓ TENHO':'✕ FALTA'}</span>`;
 }
 
-function badgeHTML(cap) {
-  return cap.owned
-    ? `<span class="badge badge-owned">TENHO</span>`
-    : `<span class="badge badge-missing">FALTA</span>`;
-}
-
-// ── Screen renderers ──
-function renderHome() {
-  const { caps } = state;
-  const owned = caps.filter(c => c.owned).length;
-  const missing = caps.length - owned;
-  const countries = [...new Set(caps.map(c => c.country).filter(Boolean))];
-  const usedColors = [...new Set(caps.map(c => c.color).filter(Boolean))];
-  const recent = [...caps].reverse().slice(0, 3);
-
-  return `
-  <div class="screen">
-    <div class="header">
-      <div class="header-logo">🍺</div>
-      <div>
-        <div class="header-title">Tampolas</div>
-        <div class="header-sub">Sua coleção de tampinhas</div>
-      </div>
+function capRow(cap,clickFn){
+  return `<div onclick="${clickFn}('${cap.id}')" style="display:flex;align-items:center;gap:12px;padding:12px 14px 12px 18px;border-radius:16px;cursor:pointer;margin:0 16px 8px;border:1.5px solid ${cap.owned?'#22c55e22':'#ef444422'};background:${T.card};position:relative;overflow:hidden">
+    <div style="position:absolute;left:0;top:0;bottom:0;width:4px;background:${cap.owned?T.green:T.red};border-radius:4px 0 0 4px"></div>
+    ${avatar(cap,48)}
+    <div style="flex:1;min-width:0">
+      <div style="font-weight:700;font-size:15px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${cap.name}</div>
+      <div style="font-size:12px;color:${T.muted};margin-top:2px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${[cap.brand,cap.country].filter(Boolean).join(' · ')||'—'}</div>
     </div>
-
-    <div class="hero" onclick="go('${SCREENS.LIST}')">
-      <div class="hero-inner">
-        <div class="hero-label">Total de Tampolas</div>
-        <div class="hero-number">${caps.length}</div>
-        <div class="hero-sub">Toque para ver todas →</div>
-        <div class="hero-icon">🍺</div>
-      </div>
-    </div>
-
-    <div class="stats-grid">
-      <div class="stat-card">
-        <div class="stat-label">TENHO</div>
-        <div class="stat-value" style="color:#2a9d8f">${owned}</div>
-        <div class="stat-sub">${caps.length ? Math.round(owned/caps.length*100) : 0}% da coleção</div>
-        <div class="stat-icon">✅</div>
-      </div>
-      <div class="stat-card">
-        <div class="stat-label">FALTA</div>
-        <div class="stat-value" style="color:#e63946">${missing}</div>
-        <div class="stat-sub">${caps.length ? Math.round(missing/caps.length*100) : 0}% da coleção</div>
-        <div class="stat-icon">❌</div>
-      </div>
-    </div>
-
-    <div class="stats-grid" style="margin-top:0">
-      <div class="stat-card">
-        <div class="stat-label">PAÍSES</div>
-        <div class="stat-value" style="color:${O2}">${countries.length}</div>
-        <div class="stat-sub">${countries.length === 0 ? 'Nenhum ainda' : countries.slice(0,2).join(', ')}</div>
-        <div class="stat-icon">🌍</div>
-      </div>
-      <div class="stat-card">
-        <div class="stat-label">CORES</div>
-        <div class="stat-value" style="color:${O2}">${usedColors.length}</div>
-        <div class="color-dots">
-          ${usedColors.slice(0,5).map(c => `<span class="color-dot" style="background:${c}"></span>`).join('')}
-          ${usedColors.length === 0 ? '<span style="font-size:11px;color:var(--dim)">Nenhuma ainda</span>' : ''}
-        </div>
-        <div class="stat-icon">🎨</div>
-      </div>
-    </div>
-
-    ${recent.length > 0 ? `
-    <div class="recent-section">
-      <div class="section-title">ADICIONADAS RECENTEMENTE</div>
-      ${recent.map(cap => `
-        <div class="cap-row" onclick="openDetail('${cap.id}')">
-          ${capAvatarHTML(cap, 40, 18)}
-          <div class="cap-info">
-            <div class="cap-name">${cap.name}</div>
-            <div class="cap-meta">${cap.brand || cap.country || '—'}</div>
-          </div>
-          ${badgeHTML(cap)}
-        </div>
-      `).join('')}
-    </div>` : ''}
+    ${badge(cap)}
   </div>`;
 }
 
-function renderList() {
-  const filtered = getFiltered();
-  return `
-  <div class="screen">
-    <div class="header">
-      <button class="back-btn" onclick="go('${SCREENS.HOME}')">←</button>
-      <div class="header-title">Coleção</div>
-      <span class="header-count">${state.caps.length} tampolas</span>
+// ── Screens ──
+function home(){
+  const {caps}=st;
+  const owned=caps.filter(c=>c.owned).length;
+  const missing=caps.length-owned;
+  const pct=caps.length?Math.round(owned/caps.length*100):0;
+  const countries=[...new Set(caps.map(c=>c.country).filter(Boolean))];
+  const brands=[...new Set(caps.map(c=>c.brand).filter(Boolean))];
+  const recent=[...caps].reverse().slice(0,3);
+
+  return `<div style="padding-bottom:90px">
+    <div style="padding:52px 16px 14px;display:flex;align-items:center;gap:12px">
+      <div style="width:42px;height:42px;border-radius:12px;background:linear-gradient(135deg,${O},#c05500);display:flex;align-items:center;justify-content:center;font-size:22px;box-shadow:0 4px 14px ${O}40;flex-shrink:0">🍺</div>
+      <div><div style="font-weight:800;font-size:22px;letter-spacing:-.3px">Tampolas</div><div style="font-size:12px;color:${T.muted}">Sua coleção de tampinhas</div></div>
     </div>
 
-    <div class="search-wrap">
-      <input class="search-input" placeholder="🔍 Buscar..." value="${state.search}" oninput="setState({search:this.value})" />
-    </div>
-
-    <div class="filter-tabs">
-      <button class="filter-btn ${state.filter==='all'?'active':''}" onclick="setState({filter:'all'})">Todas</button>
-      <button class="filter-btn ${state.filter==='owned'?'active':''}" onclick="setState({filter:'owned'})">Tenho</button>
-      <button class="filter-btn ${state.filter==='missing'?'active':''}" onclick="setState({filter:'missing'})">Falta</button>
-    </div>
-
-    <div style="padding:0 16px">
-      ${filtered.length === 0 ? `
-        <div class="empty">
-          <div class="empty-icon">🫙</div>
-          <div class="empty-text">${state.caps.length === 0 ? 'Coleção vazia! Toque em + para começar.' : 'Nenhuma encontrada.'}</div>
-        </div>` :
-        filtered.map(cap => `
-          <div class="cap-row" style="border-color:${cap.owned ? cap.color+'44' : 'var(--border)'}" onclick="openDetail('${cap.id}')">
-            ${capAvatarHTML(cap, 48, 22)}
-            <div class="cap-info">
-              <div class="cap-name">${cap.name}</div>
-              <div class="cap-meta">${[cap.brand, cap.country].filter(Boolean).join(' · ') || '—'}</div>
-            </div>
-            ${badgeHTML(cap)}
-          </div>
-        `).join('')
-      }
-    </div>
-  </div>`;
-}
-
-function renderDetail() {
-  const cap = getSelected();
-  if (!cap) return '<div class="screen"><div class="header"><button class="back-btn" onclick="go(\'list\')">←</button></div></div>';
-
-  const colorDot = `<span style="display:inline-block;width:16px;height:16px;border-radius:50%;background:${cap.color};box-shadow:0 0 6px ${cap.color}"></span>`;
-
-  return `
-  <div class="screen" style="padding-bottom:100px">
-    <div class="detail-hero">
-      ${cap.photo
-        ? `<img src="${cap.photo}" alt="${cap.name}" />`
-        : `<div class="detail-hero-bg" style="background:linear-gradient(160deg,${cap.color}88,var(--bg))">🍺</div>`
-      }
-      <div class="detail-overlay"></div>
-      <button class="detail-back" onclick="go('${SCREENS.LIST}')">←</button>
-      <div class="detail-title-wrap">
-        <div class="detail-name">${cap.name}</div>
-        ${cap.brand ? `<div class="detail-brand">${cap.brand}</div>` : ''}
+    <div onclick="go('${S.LIST}')" style="margin:0 16px 14px;border-radius:20px;overflow:hidden;cursor:pointer">
+      <div style="background:linear-gradient(135deg,${O},#ffaa00 55%,#ffcc44);padding:24px 20px;position:relative;overflow:hidden">
+        <div style="font-size:11px;font-weight:700;letter-spacing:2px;color:rgba(0,0,0,.45);text-transform:uppercase">Total de Tampolas</div>
+        <div style="font-size:64px;font-weight:900;color:#fff;line-height:1;margin:4px 0;text-shadow:0 2px 10px rgba(0,0,0,.2)">${caps.length}</div>
+        <div style="font-size:13px;color:rgba(0,0,0,.45)">Ver coleção completa →</div>
+        <div style="position:absolute;right:-8px;top:50%;transform:translateY(-50%);font-size:90px;opacity:.12">🍺</div>
       </div>
     </div>
 
-    <div class="detail-body">
-      <button class="toggle-btn" style="background:${cap.owned?'#0a2a1a':`${O}22`};color:${cap.owned?'#2a9d8f':O2};border:1px solid ${cap.owned?'#1a5a3a':O+'66'}" onclick="toggleOwned('${cap.id}')">
-        ${cap.owned ? '✓ Tenho esta tampola' : '+ Marcar como tenho'}
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin:0 16px 10px">
+      <div onclick="st.filter='owned';go('${S.LIST}')" style="background:${T.card};border-radius:16px;padding:16px;border:1.5px solid ${T.gBorder};position:relative;overflow:hidden;cursor:pointer">
+        <div style="font-size:10px;font-weight:700;color:${T.green};letter-spacing:2px">TENHO</div>
+        <div style="font-size:40px;font-weight:900;color:${T.green};line-height:1;margin:4px 0">${owned}</div>
+        <div style="font-size:11px;color:${T.dim}">${pct}% da coleção</div>
+        <div style="position:absolute;right:10px;bottom:8px;font-size:26px;opacity:.15">✅</div>
+      </div>
+      <div onclick="st.filter='missing';go('${S.LIST}')" style="background:${T.card};border-radius:16px;padding:16px;border:1.5px solid ${T.rBorder};position:relative;overflow:hidden;cursor:pointer">
+        <div style="font-size:10px;font-weight:700;color:${T.red};letter-spacing:2px">FALTA</div>
+        <div style="font-size:40px;font-weight:900;color:${T.red};line-height:1;margin:4px 0">${missing}</div>
+        <div style="font-size:11px;color:${T.dim}">${100-pct}% faltando</div>
+        <div style="position:absolute;right:10px;bottom:8px;font-size:26px;opacity:.15">❌</div>
+      </div>
+    </div>
+
+    ${caps.length>0?`<div style="margin:0 16px 10px">
+      <div style="display:flex;justify-content:space-between;margin-bottom:6px">
+        <span style="font-size:11px;font-weight:700;color:${T.muted};letter-spacing:1px;text-transform:uppercase">Progresso</span>
+        <span style="font-size:12px;font-weight:700;color:${T.green}">${pct}% completa</span>
+      </div>
+      <div style="height:8px;background:${T.card2};border-radius:10px;overflow:hidden">
+        <div style="height:100%;width:${pct}%;border-radius:10px;background:linear-gradient(90deg,${T.green},#16a34a)"></div>
+      </div>
+    </div>`:''}
+
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin:0 16px 16px">
+      ${[{l:'PAÍSES',v:countries.length,s:countries.slice(0,2).join(', ')||'Nenhum ainda',ic:'🌍'},{l:'MARCAS',v:brands.length,s:brands.slice(0,2).join(', ')||'Nenhuma ainda',ic:'🏷️'}].map(x=>`
+      <div style="background:${T.card};border-radius:16px;padding:16px;border:1px solid ${T.border};position:relative;overflow:hidden">
+        <div style="font-size:10px;font-weight:700;color:${T.muted};letter-spacing:2px">${x.l}</div>
+        <div style="font-size:36px;font-weight:900;color:${T.o2};line-height:1;margin:4px 0">${x.v}</div>
+        <div style="font-size:11px;color:${T.dim};overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${x.s}</div>
+        <div style="position:absolute;right:10px;bottom:8px;font-size:24px;opacity:.12">${x.ic}</div>
+      </div>`).join('')}
+    </div>
+
+    ${recent.length>0?`
+    <div style="display:flex;justify-content:space-between;align-items:center;padding:0 16px;margin-bottom:8px">
+      <span style="font-size:11px;font-weight:700;color:${T.muted};letter-spacing:1px;text-transform:uppercase">Recentes</span>
+      <span onclick="go('${S.LIST}')" style="font-size:12px;color:${O};font-weight:700;cursor:pointer">Ver todas</span>
+    </div>
+    ${recent.map(c=>capRow(c,'openDetail')).join('')}`:''}
+  </div>`;
+}
+
+function list(){
+  const {caps,filter,q}=st;
+  const owned=caps.filter(c=>c.owned).length;
+  const missing=caps.length-owned;
+  const filtered=caps.filter(c=>{
+    const lq=q.toLowerCase();
+    const ms=!lq||c.name.toLowerCase().includes(lq)||(c.brand||'').toLowerCase().includes(lq)||(c.country||'').toLowerCase().includes(lq);
+    const mf=filter==='all'||(filter==='owned'&&c.owned)||(filter==='missing'&&!c.owned);
+    return ms&&mf;
+  });
+
+  return `<div style="padding-bottom:90px">
+    <div style="padding:52px 16px 14px;display:flex;align-items:center;gap:12px">
+      <button onclick="go('${S.HOME}')" style="background:${T.card};border:1px solid ${T.border};color:${T.text};border-radius:10px;width:38px;height:38px;cursor:pointer;font-size:18px;display:flex;align-items:center;justify-content:center;flex-shrink:0">←</button>
+      <div style="flex:1">
+        <div style="font-weight:800;font-size:18px">Coleção</div>
+        <div style="font-size:11px;color:${T.muted};margin-top:1px">${caps.length} tampolas &nbsp;·&nbsp; <span style="color:${T.green}">✓ ${owned}</span> &nbsp;·&nbsp; <span style="color:${T.red}">✕ ${missing}</span></div>
+      </div>
+    </div>
+
+    <div style="padding:0 16px 10px;position:relative">
+      <span style="position:absolute;left:28px;top:50%;transform:translateY(-50%);color:${T.muted};font-size:16px;pointer-events:none">🔍</span>
+      <input oninput="set({q:this.value})" value="${q}" placeholder="Buscar nome, marca ou país..." style="width:100%;background:${T.card2};border:1.5px solid ${T.border};color:${T.text};border-radius:12px;padding:11px 14px 11px 40px;font-size:15px;outline:none;font-family:inherit;box-sizing:border-box"/>
+    </div>
+
+    <div style="display:flex;gap:8px;padding:0 16px 12px">
+      ${[{k:'all',l:`Todas (${caps.length})`,ac:O,abg:O+'20',ab:O+'55'},{k:'owned',l:`✓ Tenho (${owned})`,ac:T.green,abg:T.gBg,ab:T.gBorder},{k:'missing',l:`✕ Falta (${missing})`,ac:T.red,abg:T.rBg,ab:T.rBorder}].map(f=>`
+      <button onclick="set({filter:'${f.k}'})" style="flex:1;padding:8px 0;border-radius:10px;border:1.5px solid ${filter===f.k?f.ab:T.border};background:${filter===f.k?f.abg:T.card2};color:${filter===f.k?f.ac:T.muted};font-weight:700;font-size:11px;cursor:pointer;font-family:inherit">${f.l}</button>`).join('')}
+    </div>
+
+    ${filtered.length===0
+      ?`<div style="text-align:center;padding:64px 24px;color:${T.dim}"><div style="font-size:52px;margin-bottom:14px">${caps.length===0?'🫙':'🔍'}</div><div style="font-size:14px;line-height:1.6">${caps.length===0?'Coleção vazia!<br>Toque em + para começar.':'Nenhuma tampola encontrada.'}</div></div>`
+      :filtered.map(c=>capRow(c,'openDetail')).join('')
+    }
+  </div>`;
+}
+
+function detail(){
+  const cap=st.caps.find(c=>c.id===st.selId);
+  if(!cap) return `<div><button onclick="go('${S.LIST}')">←</button></div>`;
+  return `<div style="padding-bottom:100px">
+    <div style="position:relative;height:260px;overflow:hidden">
+      ${cap.photo?`<img src="${cap.photo}" style="width:100%;height:100%;object-fit:cover"/>`:`<div style="width:100%;height:100%;background:linear-gradient(160deg,${cap.color}77,${T.bg});display:flex;align-items:center;justify-content:center;font-size:100px">🍺</div>`}
+      <div style="position:absolute;inset:0;background:linear-gradient(to bottom,rgba(0,0,0,.2),rgba(20,18,16,.97))"></div>
+      <button onclick="go('${S.LIST}')" style="position:absolute;top:52px;left:16px;background:rgba(0,0,0,.45);border:1px solid rgba(255,255,255,.1);color:${T.text};border-radius:10px;padding:8px 12px;cursor:pointer;font-size:18px">←</button>
+      <div style="position:absolute;bottom:16px;left:16px;right:16px">
+        <div style="font-weight:900;font-size:26px;text-shadow:0 2px 8px rgba(0,0,0,.8)">${cap.name}</div>
+        ${cap.brand?`<div style="color:rgba(255,255,255,.55);font-size:14px;margin-top:4px">${cap.brand}</div>`:''}
+      </div>
+    </div>
+    <div style="padding:16px">
+      <button onclick="toggleOwned('${cap.id}')" style="width:100%;padding:16px;border-radius:14px;cursor:pointer;font-weight:800;font-size:17px;margin-bottom:12px;display:flex;align-items:center;justify-content:center;gap:10px;background:${cap.owned?T.gBg:T.rBg};color:${cap.owned?T.green:T.red};border:2px solid ${cap.owned?T.gBorder:T.rBorder};font-family:inherit">
+        ${cap.owned?'✓  Tenho esta tampola':'✕  Não tenho — toque para marcar como tenho'}
       </button>
-
-      <div class="info-grid">
-        <div class="info-card">
-          <div class="info-label">📍 País</div>
-          <div class="info-value">${cap.country || '—'}</div>
-        </div>
-        <div class="info-card">
-          <div class="info-label">🔢 Quantidade</div>
-          <div class="info-value">×${cap.quantity || 1}</div>
-        </div>
-        <div class="info-card">
-          <div class="info-label">📅 Adicionada</div>
-          <div class="info-value">${cap.addedAt || '—'}</div>
-        </div>
-        <div class="info-card">
-          <div class="info-label">🎨 Cor</div>
-          <div class="info-value">${colorDot}</div>
-        </div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:12px">
+        ${[['📍 País',cap.country||'—'],['🔢 Qtd',`×${cap.quantity||1}`],['📅 Adicionada',cap.addedAt||'—'],['🎨 Cor',`<span style="width:18px;height:18px;border-radius:50%;background:${cap.color};display:inline-block;box-shadow:0 0 8px ${cap.color}"></span>`]].map(([l,v])=>`
+        <div style="background:${T.card};border-radius:14px;padding:14px;border:1px solid ${T.border}">
+          <div style="font-size:11px;color:${T.muted};font-weight:600;margin-bottom:5px">${l}</div>
+          <div style="font-weight:700;font-size:15px">${v}</div>
+        </div>`).join('')}
       </div>
-
-      ${cap.notes ? `
-      <div class="notes-card">
-        <div class="info-label">📝 Notas</div>
-        <div class="notes-text">${cap.notes}</div>
-      </div>` : ''}
-
-      <div class="action-row">
-        <button class="btn-edit" onclick="openEdit(state.caps.find(c=>c.id==='${cap.id}'))">✏️ Editar</button>
-        <button class="btn-delete" onclick="deleteCap('${cap.id}')">🗑</button>
+      ${cap.notes?`<div style="background:${T.card};border-radius:14px;padding:14px 16px;border:1px solid ${T.border};margin-bottom:12px"><div style="font-size:11px;color:${T.muted};font-weight:600;margin-bottom:6px">📝 Notas</div><div style="font-size:14px;color:#c0a888;line-height:1.6">${cap.notes}</div></div>`:''}
+      <div style="display:flex;gap:10px">
+        <button onclick='openEdit(${JSON.stringify(cap).replace(/'/g,"&#39;")})' style="flex:1;padding:14px;border-radius:14px;border:1px solid ${T.border};background:${T.card};color:${T.text};font-weight:700;font-size:14px;cursor:pointer;font-family:inherit">✏️ Editar</button>
+        <button onclick="delCap('${cap.id}')" style="padding:14px 18px;border-radius:14px;border:1px solid ${T.rBorder};background:${T.rBg};color:${T.red};font-weight:700;font-size:14px;cursor:pointer;font-family:inherit">🗑</button>
       </div>
     </div>
   </div>`;
 }
 
-function renderAdd() {
-  const { form, editing } = state;
-  return `
-  <div class="screen">
-    <div class="header">
-      <button class="back-btn" onclick="go('${editing ? SCREENS.DETAIL : SCREENS.LIST}')">←</button>
-      <div class="header-title">${editing ? 'Editar Tampola' : 'Nova Tampola'}</div>
+function addForm(){
+  const {form,edit}=st;
+  const inp=`width:100%;background:#1a1510;border:1.5px solid ${T.border};color:${T.text};border-radius:12px;padding:12px 14px;font-size:15px;outline:none;font-family:inherit;box-sizing:border-box`;
+  const lbl=`font-size:11px;font-weight:700;color:${T.muted};letter-spacing:1px;text-transform:uppercase;display:block;margin-bottom:8px`;
+
+  return `<div style="padding-bottom:100px">
+    <div style="padding:52px 16px 14px;display:flex;align-items:center;gap:12px">
+      <button onclick="go('${edit?S.DETAIL:S.LIST}')" style="background:${T.card};border:1px solid ${T.border};color:${T.text};border-radius:10px;width:38px;height:38px;cursor:pointer;font-size:18px;display:flex;align-items:center;justify-content:center;flex-shrink:0">←</button>
+      <div style="font-weight:800;font-size:18px">${edit?'Editar Tampola':'Nova Tampola'}</div>
     </div>
 
-    <div class="form-body">
+    <div style="padding:0 16px;display:flex;flex-direction:column;gap:16px">
 
-      <!-- Photo -->
       <div>
-        <label class="field-label">FOTO DA TAMPOLA</label>
-        <div class="photo-preview" style="border-color:${form.photo ? O+'88' : 'var(--border)'}">
+        <span style="${lbl}">Status na coleção</span>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
+          <div onclick="setF({owned:true})" style="padding:14px;border-radius:12px;background:${form.owned?T.gBg:T.card};border:2px solid ${form.owned?T.gBorder:T.border};color:${form.owned?T.green:T.muted};cursor:pointer;display:flex;flex-direction:column;align-items:center;gap:6px;font-size:13px;font-weight:700"><span style="font-size:24px">✓</span>Tenho</div>
+          <div onclick="setF({owned:false})" style="padding:14px;border-radius:12px;background:${!form.owned?T.rBg:T.card};border:2px solid ${!form.owned?T.rBorder:T.border};color:${!form.owned?T.red:T.muted};cursor:pointer;display:flex;flex-direction:column;align-items:center;gap:6px;font-size:13px;font-weight:700"><span style="font-size:24px">✕</span>Falta</div>
+        </div>
+      </div>
+
+      <div>
+        <span style="${lbl}">Foto da tampola</span>
+        <div style="width:100%;height:180px;border-radius:14px;border:2px dashed ${form.photo?O+'88':T.border};overflow:hidden;background:${T.card};position:relative;display:flex;align-items:center;justify-content:center;margin-bottom:10px">
           ${form.photo
-            ? `<img src="${form.photo}" alt="foto" /><button class="photo-remove" onclick="setState({form:{...state.form,photo:null}})">✕</button>`
-            : `<div class="photo-placeholder"><div class="ph-icon">📷</div><div class="ph-text">Nenhuma foto selecionada</div></div>`
-          }
+            ?`<img src="${form.photo}" style="width:100%;height:100%;object-fit:cover"/><button onclick="setF({photo:null})" style="position:absolute;top:8px;right:8px;background:rgba(0,0,0,.65);border:none;color:#fff;border-radius:50%;width:30px;height:30px;cursor:pointer;font-size:14px">✕</button>`
+            :`<div style="text-align:center;color:${T.dim}"><div style="font-size:38px;margin-bottom:8px">📷</div><div style="font-size:13px;color:${T.muted}">Nenhuma foto</div></div>`}
         </div>
-        <div class="photo-btns">
-          <button class="btn-camera" onclick="document.getElementById('input-camera').click()">📷 Câmera</button>
-          <button class="btn-gallery" onclick="document.getElementById('input-gallery').click()">🖼️ Galeria</button>
+        <div style="display:flex;gap:10px">
+          <button onclick="document.getElementById('cam').click()" style="flex:1;padding:12px;border-radius:12px;border:1px solid ${O}55;background:${O}12;color:${T.o2};font-weight:700;font-size:14px;cursor:pointer;font-family:inherit">📷 Câmera</button>
+          <button onclick="document.getElementById('gal').click()" style="flex:1;padding:12px;border-radius:12px;border:1px solid ${T.border};background:${T.card2};color:${T.muted};font-weight:700;font-size:14px;cursor:pointer;font-family:inherit">🖼️ Galeria</button>
         </div>
-        <input id="input-camera" type="file" accept="image/*" capture="environment" style="display:none" onchange="handlePhoto(this.files[0])" />
-        <input id="input-gallery" type="file" accept="image/*" style="display:none" onchange="handlePhoto(this.files[0])" />
+        <input id="cam" type="file" accept="image/*" capture="environment" style="display:none" onchange="loadPhoto(this.files[0])"/>
+        <input id="gal" type="file" accept="image/*" style="display:none" onchange="loadPhoto(this.files[0])"/>
       </div>
 
-      <!-- Nome -->
+      ${[{k:'name',l:'Nome *',p:'Ex: Brahma Especial'},{k:'brand',l:'Marca',p:'Ex: Brahma'},{k:'country',l:'País',p:'Ex: Brasil'}].map(f=>`
       <div>
-        <label class="field-label">NOME *</label>
-        <input class="field-input" placeholder="Ex: Brahma Especial" value="${form.name}" oninput="setState({form:{...state.form,name:this.value}})" />
+        <span style="${lbl}">${f.l}</span>
+        <input value="${form[f.k]}" oninput="setF({${f.k}:this.value})" placeholder="${f.p}" style="${inp}"/>
+      </div>`).join('')}
+
+      <div>
+        <span style="${lbl}">Quantidade</span>
+        <input type="number" min="1" value="${form.quantity}" oninput="setF({quantity:parseInt(this.value)||1})" style="${inp}"/>
       </div>
 
-      <!-- Marca -->
       <div>
-        <label class="field-label">MARCA</label>
-        <input class="field-input" placeholder="Ex: Brahma" value="${form.brand}" oninput="setState({form:{...state.form,brand:this.value}})" />
-      </div>
-
-      <!-- País -->
-      <div>
-        <label class="field-label">PAÍS</label>
-        <input class="field-input" placeholder="Ex: Brasil" value="${form.country}" oninput="setState({form:{...state.form,country:this.value}})" />
-      </div>
-
-      <!-- Quantidade -->
-      <div>
-        <label class="field-label">QUANTIDADE</label>
-        <input class="field-input" type="number" min="1" value="${form.quantity}" oninput="setState({form:{...state.form,quantity:parseInt(this.value)||1}})" />
-      </div>
-
-      <!-- Cor -->
-      <div>
-        <label class="field-label">COR DA TAMPOLA</label>
-        <div class="color-picker">
-          ${COLORS.map(c => `
-            <div class="color-swatch ${form.color===c?'selected':''}" style="background:${c};box-shadow:${form.color===c?`0 0 12px ${c}`:'none'}" onclick="setState({form:{...state.form,color:'${c}'}})"></div>
-          `).join('')}
+        <span style="${lbl}">Cor da tampola</span>
+        <div style="display:flex;gap:10px;flex-wrap:wrap;margin-top:2px">
+          ${COLORS.map(c=>`<div onclick="setF({color:'${c}'})" style="width:34px;height:34px;border-radius:50%;background:${c};cursor:pointer;border:${form.color===c?'3px solid #fff':'3px solid transparent'};transform:${form.color===c?'scale(1.22)':'scale(1)'};box-shadow:${form.color===c?`0 0 10px ${c}`:'none'};transition:all .15s"></div>`).join('')}
         </div>
       </div>
 
-      <!-- Notas -->
       <div>
-        <label class="field-label">NOTAS</label>
-        <textarea class="field-input" rows="3" placeholder="Observações, raridade, origem..." oninput="setState({form:{...state.form,notes:this.value}})">${form.notes}</textarea>
+        <span style="${lbl}">Notas</span>
+        <textarea oninput="setF({notes:this.value})" placeholder="Raridade, origem, detalhes..." rows="3" style="${inp};resize:vertical;line-height:1.5">${form.notes}</textarea>
       </div>
 
-      <button class="btn-submit" onclick="saveCap()">
-        ${editing ? 'SALVAR ALTERAÇÕES' : 'ADICIONAR TAMPOLA'}
+      <button onclick="saveCap()" style="width:100%;padding:16px;border-radius:14px;border:none;background:linear-gradient(135deg,${O},#c05500);color:#fff;font-weight:800;font-size:16px;cursor:pointer;font-family:inherit;box-shadow:0 6px 20px ${O}40;margin-bottom:8px">
+        ${edit?'SALVAR ALTERAÇÕES':'ADICIONAR TAMPOLA'}
       </button>
-
     </div>
   </div>`;
 }
 
-function renderNav() {
-  const { screen } = state;
-  return `
-  <div class="bottom-nav">
-    <button class="nav-btn" onclick="go('${SCREENS.HOME}')">
-      <span class="nav-icon">🏠</span>
-      <span class="nav-label" style="color:${screen===SCREENS.HOME?O:'var(--muted)'}">Início</span>
-    </button>
-    <button class="nav-btn" onclick="go('${SCREENS.LIST}')">
-      <span class="nav-icon">📋</span>
-      <span class="nav-label" style="color:${screen===SCREENS.LIST?O:'var(--muted)'}">Coleção</span>
-    </button>
-    <div class="nav-fab-wrap">
-      <button class="nav-fab" onclick="openAdd()">+</button>
+function nav(){
+  const {scr}=st;
+  return `<div style="position:fixed;bottom:0;left:50%;transform:translateX(-50%);width:100%;max-width:480px;background:rgba(14,12,10,.96);border-top:1px solid ${T.border};padding:8px 8px 20px;display:flex;align-items:center;z-index:100;backdrop-filter:blur(12px)">
+    ${[{k:S.HOME,ic:'🏠',l:'Início'},{k:S.LIST,ic:'📋',l:'Coleção'}].map(n=>`
+    <button onclick="go('${n.k}')" style="flex:1;background:none;border:none;cursor:pointer;display:flex;flex-direction:column;align-items:center;gap:2px;padding:4px 0">
+      <span style="font-size:22px">${n.ic}</span>
+      <span style="font-size:10px;font-weight:700;color:${scr===n.k?O:T.muted}">${n.l}</span>
+    </button>`).join('')}
+    <div style="flex:1;display:flex;justify-content:center">
+      <button onclick="openAdd()" style="width:52px;height:52px;border-radius:50%;border:none;cursor:pointer;background:linear-gradient(135deg,${O},#c05500);font-size:26px;color:#fff;box-shadow:0 4px 16px ${O}70;display:flex;align-items:center;justify-content:center">+</button>
     </div>
-    <div class="nav-spacer"></div>
+    <button onclick="st.filter='owned';go('${S.LIST}')" style="flex:1;background:none;border:none;cursor:pointer;display:flex;flex-direction:column;align-items:center;gap:2px;padding:4px 0">
+      <span style="font-size:20px">✓</span>
+      <span style="font-size:10px;font-weight:700;color:${T.green}">Tenho</span>
+    </button>
+    <button onclick="st.filter='missing';go('${S.LIST}')" style="flex:1;background:none;border:none;cursor:pointer;display:flex;flex-direction:column;align-items:center;gap:2px;padding:4px 0">
+      <span style="font-size:20px">✕</span>
+      <span style="font-size:10px;font-weight:700;color:${T.red}">Falta</span>
+    </button>
   </div>`;
 }
 
-function renderToast() {
-  const { toast } = state;
-  if (!toast) return '';
-  const colors = {
-    err:  { bg: '#4a0a0a', border: '#e63946', color: '#e63946' },
-    info: { bg: '#0a1e2a', border: '#457b9d', color: '#4cc9f0' },
-    ok:   { bg: '#1a2a0a', border: '#4a9d2a', color: '#7dcc4a' },
-  }[toast.type] || {};
-  return `<div class="toast" style="background:${colors.bg};border:1px solid ${colors.border};color:${colors.color}">${toast.msg}</div>`;
+function toastHtml(){
+  if(!st.toast) return '';
+  const t={err:['#4a0a0a','#ef4444'],info:['#0a1e2a','#4cc9f0'],ok:['#052010','#22c55e']}[st.toast.type];
+  return `<div style="position:fixed;top:16px;left:50%;transform:translateX(-50%);z-index:999;padding:10px 20px;border-radius:24px;font-size:13px;font-weight:600;white-space:nowrap;background:${t[0]};color:${t[1]};border:1px solid ${t[1]};box-shadow:0 4px 20px rgba(0,0,0,.5)">${st.toast.msg}</div>`;
 }
 
-// ── Main render ──
-function render() {
-  const { screen } = state;
-  let content = '';
-  if (screen === SCREENS.HOME)   content = renderHome();
-  if (screen === SCREENS.LIST)   content = renderList();
-  if (screen === SCREENS.DETAIL) content = renderDetail();
-  if (screen === SCREENS.ADD)    content = renderAdd();
+// ── Open actions (global scope for inline handlers) ──
+function openDetail(id){ st.selId=id; go(S.DETAIL); }
 
-  document.getElementById('app').innerHTML = content + renderNav() + renderToast();
+// ── Render ──
+function render(){
+  const screens={[S.HOME]:home,[S.LIST]:list,[S.ADD]:addForm,[S.DETAIL]:detail};
+  document.getElementById('app').innerHTML=(screens[st.scr]||home)()+nav()+toastHtml();
 }
 
 // ── Boot ──
-async function boot() {
-  document.getElementById('app').innerHTML = `
-    <div class="loading">
-      <div class="loading-icon">🍺</div>
-      <div class="loading-text">Carregando coleção...</div>
-    </div>`;
-
-  try {
-    await openDB();
-    state.caps = await dbGetAll();
-  } catch (e) {
-    console.warn('IndexedDB não disponível, usando memória.');
-  }
-
+async function boot(){
+  document.getElementById('app').innerHTML=`<div style="min-height:100vh;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:14px"><div style="font-size:48px;animation:pulse 1.4s ease infinite">🍺</div><div style="color:${T.muted};font-size:14px">Carregando coleção...</div></div>`;
+  try { await openDB(); st.caps=await dbAll(); } catch(e){ console.warn('IndexedDB indisponível'); }
   render();
 }
 
