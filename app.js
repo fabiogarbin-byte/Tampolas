@@ -11,6 +11,7 @@ const firebaseConfig = {
   messagingSenderId: "594488372191",
   appId: "1:594488372191:web:83f46233b8c4fffe23f26a"
 };
+const APP_VERSION = 'v1.5';
 const GEMINI_KEY = "AIzaSyCGXmgMtEr9vmg35-MZf_ms-Nqp8K5qbyM";
 
 const firebaseApp = initializeApp(firebaseConfig);
@@ -518,7 +519,7 @@ function renderHome() {
   el.innerHTML=`
     <div style="padding:52px 16px 14px;display:flex;align-items:center;gap:12px">
       <div style="width:42px;height:42px;border-radius:12px;background:linear-gradient(135deg,${O},#c05500);display:flex;align-items:center;justify-content:center;font-size:22px;box-shadow:0 4px 14px ${O}40;flex-shrink:0">🍺</div>
-      <div style="flex:1"><div style="font-weight:800;font-size:22px;letter-spacing:-.3px">Tampolas</div><div style="font-size:12px;color:${T.muted}">${currentUser?.displayName||'Minha coleção'}</div></div>
+      <div style="flex:1"><div style="font-weight:800;font-size:22px;letter-spacing:-.3px">Tampolas</div><div style="font-size:12px;color:${T.muted}">${currentUser?.displayName||'Minha coleção'}</div></div><div style="font-size:10px;font-weight:700;color:${T.dim};background:${T.card2};border:1px solid ${T.border};border-radius:8px;padding:3px 8px;flex-shrink:0">${APP_VERSION}</div>
     </div>
     <div onclick="goTo('list');renderList()" style="margin:0 16px 14px;border-radius:20px;overflow:hidden;cursor:pointer">
       <div style="background:linear-gradient(135deg,${O},#ffaa00 55%,#ffcc44);padding:24px 20px;position:relative;overflow:hidden">
