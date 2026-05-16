@@ -11,7 +11,7 @@ const firebaseConfig = {
   messagingSenderId: "594488372191",
   appId: "1:594488372191:web:83f46233b8c4fffe23f26a"
 };
-const APP_VERSION = 'v2.7';
+const APP_VERSION = 'v2.8';
 const GEMINI_KEY_STORAGE = 'tampolas-gemini-key';
 let GEMINI_KEY = '';
 function loadGeminiKey() { GEMINI_KEY = localStorage.getItem(GEMINI_KEY_STORAGE) || ''; }
@@ -186,6 +186,8 @@ function buildApp() {
         </div>
       </div>
 
+      <div id="ai-debug" style="display:none;background:#0a0a0a;border:1px solid #333;border-radius:10px;padding:12px;font-size:11px;color:#aaa;font-family:monospace;word-break:break-all;line-height:1.6"></div>
+
       <div><div style="${lblStyle()}">Nome *</div><input id="f-name" placeholder="Ex: Brahma Especial" style="${inpStyle()}" oninput="checkDuplicate()"/></div>
       <div><div style="${lblStyle()}">Marca</div><input id="f-brand" placeholder="Ex: Brahma" style="${inpStyle()}"/></div>
       <div><div style="${lblStyle()}">Cor</div><input id="f-color" placeholder="Ex: Vermelha, Dourada, Azul..." style="${inpStyle()}"/></div>
@@ -327,13 +329,19 @@ async function runAI() {
 
   aiLoading = true;
   if (btn) { btn.textContent='⟳ Analisando...'; btn.disabled=true; }
+  const dbg = document.getElementById('ai-debug');
+  if (dbg) { dbg.style.display='block'; dbg.textContent='Iniciando... modelo: gemini-2.5-flash | foto: ' + (originalPhotoBase64||pendingPhotoBase64||'').slice(0,20) + '...'; }
   try {
+    if (dbg) dbg.textContent += '\nChamando API...';
     const result = await analyzePhotoWithAI(originalPhotoBase64||pendingPhotoBase64, originalPhotoMime||pendingPhotoMime);
+    if (dbg) dbg.textContent += '\nSucesso!';
     aiData = result;
     showAIResult(result);
     showToast('✨ IA identificou a tampola!','ai');
+    if (dbg) dbg.style.display='none';
   } catch(e) {
     console.error('AI error:', e);
+    if (dbg) { dbg.style.display='block'; dbg.textContent = '❌ ERRO:\n' + (e.message||String(e)); }
     showToast('Erro IA: ' + (e.message||'Tente novamente'),'err');
   } finally {
     aiLoading = false;
