@@ -11,7 +11,50 @@ const firebaseConfig = {
   messagingSenderId: "594488372191",
   appId: "1:594488372191:web:83f46233b8c4fffe23f26a"
 };
-const APP_VERSION = 'v3.8';
+const APP_VERSION = 'v3.9';
+const COUNTRY_FLAGS = {
+  'brasil': '🇧🇷', 'brazil': '🇧🇷',
+  'alemanha': '🇩🇪', 'germany': '🇩🇪',
+  'estados unidos': '🇺🇸', 'eua': '🇺🇸', 'usa': '🇺🇸',
+  'holanda': '🇳🇱', 'netherlands': '🇳🇱',
+  'méxico': '🇲🇽', 'mexico': '🇲🇽',
+  'argentina': '🇦🇷',
+  'portugal': '🇵🇹',
+  'espanha': '🇪🇸', 'spain': '🇪🇸',
+  'itália': '🇮🇹', 'italy': '🇮🇹',
+  'bélgica': '🇧🇪', 'belgium': '🇧🇪',
+  'irlanda': '🇮🇪', 'ireland': '🇮🇪',
+  'reino unido': '🇬🇧', 'uk': '🇬🇧', 'england': '🇬🇧',
+  'japão': '🇯🇵', 'japan': '🇯🇵',
+  'china': '🇨🇳',
+  'austrália': '🇦🇺', 'australia': '🇦🇺',
+  'canadá': '🇨🇦', 'canada': '🇨🇦',
+  'rússia': '🇷🇺', 'russia': '🇷🇺',
+  'dinamarca': '🇩🇰', 'denmark': '🇩🇰',
+  'suécia': '🇸🇪', 'sweden': '🇸🇪',
+  'noruega': '🇳🇴', 'norway': '🇳🇴',
+  'república tcheca': '🇨🇿', 'czech': '🇨🇿',
+  'colômbia': '🇨🇴', 'colombia': '🇨🇴',
+  'chile': '🇨🇱',
+  'peru': '🇵🇪',
+  'uruguai': '🇺🇾', 'uruguay': '🇺🇾',
+  'áfrica do sul': '🇿🇦', 'south africa': '🇿🇦',
+  'china': '🇨🇳',
+  'coreia': '🇰🇷', 'korea': '🇰🇷',
+  'tailândia': '🇹🇭', 'thailand': '🇹🇭',
+  'cuba': '🇨🇺',
+  'jamaica': '🇯🇲',
+  'escócia': '🏴󠁧󠁢󠁳󠁣󠁴󠁿', 'scotland': '🏴󠁧󠁢󠁳󠁣󠁴󠁿',
+  'frança': '🇫🇷', 'france': '🇫🇷',
+  'suíça': '🇨🇭', 'switzerland': '🇨🇭',
+};
+
+function countryFlag(country) {
+  if (!country) return '🌍';
+  const key = country.toLowerCase().trim();
+  return COUNTRY_FLAGS[key] || '🌍';
+}
+
 const GEMINI_KEY_STORAGE = 'tampolas-gemini-key';
 let GEMINI_KEY = '';
 function loadGeminiKey() { GEMINI_KEY = localStorage.getItem(GEMINI_KEY_STORAGE) || ''; }
@@ -302,6 +345,16 @@ function buildApp() {
       </button>
 
     </div>
+  </div>
+
+
+  <!-- STATS DETAIL -->
+  <div id="scr-stats" class="screen" style="display:none;padding-bottom:90px">
+    <div style="padding:52px 16px 14px;display:flex;align-items:center;gap:12px">
+      <button data-action="goto-home" style="${btnIconStyle()}">←</button>
+      <div style="font-weight:800;font-size:18px">Estatísticas</div>
+    </div>
+    <div id="stats-content" style="padding:0 16px;display:flex;flex-direction:column;gap:14px"></div>
   </div>
 
   <!-- NAV -->
@@ -830,6 +883,73 @@ async function checkServerVersion() {
   }
 }
 
+function renderStats() {
+  const el = document.getElementById('stats-content');
+  if (!el) return;
+
+  // Countries
+  const countryMap = {};
+  caps.forEach(c => {
+    const k = (c.country||'Desconhecido').trim();
+    countryMap[k] = (countryMap[k]||0) + 1;
+  });
+  const countries = Object.entries(countryMap).sort((a,b)=>b[1]-a[1]);
+
+  // Colors
+  const colorMap = {};
+  caps.forEach(c => {
+    const k = (c.color||'Sem cor').trim();
+    colorMap[k] = (colorMap[k]||0) + 1;
+  });
+  const colors = Object.entries(colorMap).sort((a,b)=>b[1]-a[1]);
+
+  // Brands
+  const brandMap = {};
+  caps.forEach(c => {
+    const k = (c.brand||'Sem marca').trim();
+    brandMap[k] = (brandMap[k]||0) + 1;
+  });
+  const brands = Object.entries(brandMap).sort((a,b)=>b[1]-a[1]);
+
+  // Types
+  const typeMap = {};
+  caps.forEach(c => {
+    const k = (c.type||'Não informado').trim();
+    typeMap[k] = (typeMap[k]||0) + 1;
+  });
+  const types = Object.entries(typeMap).sort((a,b)=>b[1]-a[1]);
+
+  const barRow = (label, count, total, extra='') => {
+    const pct = Math.round(count/total*100);
+    return `<div style="margin-bottom:10px">
+      <div style="display:flex;justify-content:space-between;margin-bottom:4px;align-items:center">
+        <span style="font-size:14px;font-weight:600">${extra}${label}</span>
+        <span style="font-size:13px;font-weight:700;color:#ffaa33">${count} <span style="font-size:11px;color:#7a6a58">(${pct}%)</span></span>
+      </div>
+      <div style="height:7px;background:#252018;border-radius:6px;overflow:hidden">
+        <div style="height:100%;width:${pct}%;background:linear-gradient(90deg,#ff8c00,#ffaa33);border-radius:6px"></div>
+      </div>
+    </div>`;
+  };
+
+  const section = (title, icon, rows) => `
+    <div style="background:#1e1a16;border-radius:16px;padding:16px;border:1px solid #2e2618">
+      <div style="font-size:14px;font-weight:800;margin-bottom:14px">${icon} ${title}</div>
+      ${rows}
+    </div>`;
+
+  el.innerHTML = [
+    section('Países', '🌍', countries.map(([k,v]) =>
+      barRow(k, v, caps.length, countryFlag(k) + ' ')).join('')),
+    section('Cores', '🎨', colors.map(([k,v]) =>
+      barRow(k, v, caps.length)).join('')),
+    section('Marcas', '🏷️', brands.slice(0,10).map(([k,v]) =>
+      barRow(k, v, caps.length)).join('')),
+    section('Tipo de bebida', '🥤', types.map(([k,v]) =>
+      barRow(k, v, caps.length)).join('')),
+  ].join('');
+}
+
 function renderProfile() {
   loadGeminiKey();
   // user info
@@ -900,6 +1020,7 @@ document.addEventListener('click', function(e) {
   }
   if (action === 'delete-cap' && dataId) { deleteCap(dataId); return; }
 
+  if (action === 'goto-stats')   { goTo('stats'); renderStats(); return; }
   if (action === 'check-version') { checkServerVersion(); return; }
 
   // Handle id-based buttons
@@ -937,6 +1058,6 @@ window.checkDuplicate=checkDuplicate; window.loadPhoto=loadPhoto;
 window.openCrop=openCrop; window.confirmCrop=confirmCrop; window.drawCrop=drawCrop;
 window.cropDown=cropDown; window.cropMove=cropMove; window.cropUp=cropUp;
 window.updatePhotoThumb=updatePhotoThumb; window.renderList=renderList;
-window.saveGeminiKey=saveGeminiKey; window.checkServerVersion=checkServerVersion; window.loadGeminiKey=loadGeminiKey; window.triggerCamera=triggerCamera; window.triggerGallery=triggerGallery; window.renderProfile=renderProfile; window.updateNavAvatar=updateNavAvatar; window.renderSettings=renderSettings;
+window.saveGeminiKey=saveGeminiKey; window.checkServerVersion=checkServerVersion; window.renderStats=renderStats; window.loadGeminiKey=loadGeminiKey; window.triggerCamera=triggerCamera; window.triggerGallery=triggerGallery; window.renderProfile=renderProfile; window.updateNavAvatar=updateNavAvatar; window.renderSettings=renderSettings;
 window.rotateCrop=rotateCrop; window.rotateCropTo=rotateCropTo; window.resetCrop=resetCrop;
 window.runAI=runAI; window.applyAI=applyAI; window.dismissAI=dismissAI;
