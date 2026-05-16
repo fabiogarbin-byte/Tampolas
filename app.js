@@ -11,7 +11,7 @@ const firebaseConfig = {
   messagingSenderId: "594488372191",
   appId: "1:594488372191:web:83f46233b8c4fffe23f26a"
 };
-const APP_VERSION = 'v3.3';
+const APP_VERSION = 'v3.5';
 const GEMINI_KEY_STORAGE = 'tampolas-gemini-key';
 let GEMINI_KEY = '';
 function loadGeminiKey() { GEMINI_KEY = localStorage.getItem(GEMINI_KEY_STORAGE) || ''; }
@@ -42,6 +42,8 @@ function subscribeCaps() {
   if (unsubCaps) unsubCaps();
   unsubCaps = onSnapshot(query(capsCol(), orderBy('createdAt','desc')), snap => {
     caps = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+    // always refresh home stats when data changes
+    renderHome();
     refreshCurrentScreen();
   });
 }
@@ -190,9 +192,9 @@ function buildApp() {
 
       <div><div style="${lblStyle()}">Nome *</div><input id="f-name" placeholder="Ex: Brahma Especial" style="${inpStyle()}" oninput="checkDuplicate()"/></div>
       <div><div style="${lblStyle()}">Marca</div><input id="f-brand" placeholder="Ex: Brahma" style="${inpStyle()}"/></div>
+      <div><div style="${lblStyle()}">Tipo de bebida</div><input id="f-type" placeholder="Ex: Cerveja, Refrigerante, Suco..." style="${inpStyle()}"/></div>
       <div><div style="${lblStyle()}">Cor</div><input id="f-color" placeholder="Ex: Vermelha, Dourada, Azul..." style="${inpStyle()}"/></div>
       <div><div style="${lblStyle()}">País de origem</div><input id="f-country" placeholder="Ex: Brasil" style="${inpStyle()}"/></div>
-      <div><div style="${lblStyle()}">Quantidade</div><input id="f-quantity" type="number" min="1" value="1" style="${inpStyle()}"/></div>
       <div><div style="${lblStyle()}">Notas</div><textarea id="f-notes" placeholder="Raridade, origem, detalhes..." rows="3" style="${inpStyle()};resize:vertical;line-height:1.5"></textarea></div>
 
       <button id="btn-save" style="width:100%;padding:16px;border-radius:14px;border:none;background:linear-gradient(135deg,${O},#c05500);color:#fff;font-weight:800;font-size:16px;cursor:pointer;font-family:inherit;box-shadow:0 6px 20px ${O}40;margin-bottom:8px">SALVAR TAMPOLA</button>
@@ -352,7 +354,7 @@ async function runAI() {
 function showAIResult(r) {
   const el=document.getElementById('ai-result'), c=document.getElementById('ai-result-content');
   if (!el||!c) return;
-  c.innerHTML=[['Nome',r.name],['Marca',r.brand],['Cor',r.color],['País',r.country]].filter(([,v])=>v)
+  c.innerHTML=[['Nome',r.name],['Marca',r.brand],['Tipo',r.type],['Cor',r.color],['País',r.country]].filter(([,v])=>v)
     .map(([l,v])=>`<div style="display:flex;justify-content:space-between;padding:4px 0;border-bottom:1px solid #2a1a3a"><span style="font-size:12px;color:${T.muted}">${l}</span><span style="font-size:13px;font-weight:700">${v}</span></div>`).join('')
     + (r.notes?`<div style="font-size:12px;color:${T.muted};margin-top:8px;font-style:italic">${r.notes}</div>`:'');
   el.style.display='block';
@@ -360,7 +362,7 @@ function showAIResult(r) {
 
 function applyAI() {
   if (!aiData) return;
-  [['f-name',aiData.name],['f-brand',aiData.brand],['f-color',aiData.color],['f-country',aiData.country],['f-notes',aiData.notes]].forEach(([id,v])=>{ if(v){ const el=document.getElementById(id); if(el) el.value=v; } });
+  [['f-name',aiData.name],['f-brand',aiData.brand],['f-type',aiData.type],['f-color',aiData.color],['f-country',aiData.country],['f-notes',aiData.notes]].forEach(([id,v])=>{ if(v){ const el=document.getElementById(id); if(el) el.value=v; } });
   dismissAI(); checkDuplicate(); showToast('Dados preenchidos!','ok');
 }
 
@@ -379,7 +381,7 @@ function checkDuplicate() {
 // ── Add/Edit ──
 function resetForm() {
   ['f-name','f-brand','f-color','f-country','f-notes'].forEach(id=>{ const el=document.getElementById(id); if(el) el.value=''; });
-  const q=document.getElementById('f-quantity'); if(q) q.value=1;
+
   document.getElementById('dup-alert').style.display='none';
   const aiRes=document.getElementById('ai-result'); if(aiRes) aiRes.style.display='none';
 }
@@ -399,9 +401,9 @@ function openEdit(cap) {
   document.getElementById('btn-save').textContent='SALVAR ALTERAÇÕES';
   document.getElementById('f-name').value    = cap.name    ||'';
   document.getElementById('f-brand').value   = cap.brand   ||'';
+  document.getElementById('f-type').value    = cap.type    ||'';
   document.getElementById('f-color').value   = cap.color   ||'';
   document.getElementById('f-country').value = cap.country ||'';
-  document.getElementById('f-quantity').value= cap.quantity||1;
   document.getElementById('f-notes').value   = cap.notes   ||'';
   document.getElementById('dup-alert').style.display='none';
   const aiRes=document.getElementById('ai-result'); if(aiRes) aiRes.style.display='none';
@@ -414,9 +416,9 @@ function getFormValues() {
   return {
     name:    (document.getElementById('f-name')?.value    ||'').trim(),
     brand:   (document.getElementById('f-brand')?.value   ||'').trim(),
+    type:    (document.getElementById('f-type')?.value    ||'').trim(),
     color:   (document.getElementById('f-color')?.value   ||'').trim(),
     country: (document.getElementById('f-country')?.value ||'').trim(),
-    quantity:parseInt(document.getElementById('f-quantity')?.value)||1,
     notes:   (document.getElementById('f-notes')?.value   ||'').trim(),
     photo:   pendingPhoto,
   };
@@ -536,9 +538,14 @@ function confirmCrop() {
   const scale=Math.max(SIZE/iw,SIZE/ih)*cropScale;
   ctx.drawImage(img, -iw*scale/2, -ih*scale/2, iw*scale, ih*scale);
   ctx.restore();
-  pendingPhoto=out.toDataURL('image/jpeg',0.85);
-  pendingPhotoBase64=pendingPhoto.split(',')[1];
-  pendingPhotoMime='image/jpeg';
+  // optimize: resize to 400px max for efficient storage
+  const FINAL_SIZE = Math.min(SIZE, 400);
+  const final = document.createElement('canvas');
+  final.width = FINAL_SIZE; final.height = FINAL_SIZE;
+  final.getContext('2d').drawImage(out, 0, 0, FINAL_SIZE, FINAL_SIZE);
+  pendingPhoto = final.toDataURL('image/jpeg', 0.82);
+  pendingPhotoBase64 = pendingPhoto.split(',')[1];
+  pendingPhotoMime = 'image/jpeg';
   updatePhotoThumb(); goTo('add');
 }
 
@@ -711,7 +718,7 @@ function capRowHTML(cap) {
     ${thumb}
     <div style="flex:1;min-width:0">
       <div style="font-weight:700;font-size:15px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${cap.name}</div>
-      <div style="font-size:12px;color:${T.muted};margin-top:2px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${[cap.brand,cap.color,cap.country].filter(Boolean).join(' · ')||'—'}</div>
+      <div style="font-size:12px;color:${T.muted};margin-top:2px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${[cap.brand,cap.type,cap.color].filter(Boolean).join(' · ')||'—'}</div>
     </div>
     <span style="font-size:20px;color:${T.muted};flex-shrink:0">›</span>
   </div>`;
@@ -722,7 +729,7 @@ function openDetail(id) { currentCapId=id; renderDetail(id); goTo('detail'); }
 
 function renderDetail(id) {
   const cap=caps.find(c=>c.id===id); if(!cap) return;
-  const fields=[['🏷️ Marca',cap.brand],['🎨 Cor',cap.color],['📍 País',cap.country],['🔢 Quantidade',cap.quantity>1?`×${cap.quantity}`:null],['📅 Adicionada',cap.addedAt]].filter(([,v])=>v);
+  const fields=[['🏷️ Marca',cap.brand],['🥤 Tipo',cap.type],['🎨 Cor',cap.color],['📍 País',cap.country],['📅 Adicionada',cap.addedAt]].filter(([,v])=>v);
   const el=document.getElementById('scr-detail'); if(!el) return;
   el.innerHTML=`
     <div style="position:relative;height:280px;overflow:hidden">
@@ -788,6 +795,10 @@ function renderProfile() {
   const input = document.getElementById('gemini-key-input');
   if (input) input.value = '';
   updateKeyStatus();
+  const verInstalled = document.getElementById('profile-version-installed');
+  const verServer    = document.getElementById('profile-version-server');
+  if (verInstalled) verInstalled.textContent = APP_VERSION;
+  if (verServer)    verServer.textContent = 'toque em verificar';
 }
 
 function updateNavAvatar() {
@@ -836,6 +847,8 @@ document.addEventListener('click', function(e) {
   }
   if (action === 'delete-cap' && dataId) { deleteCap(dataId); return; }
 
+  if (action === 'check-version') { checkServerVersion(); return; }
+
   // Handle id-based buttons
   switch(id) {
     case 'btn-ai':          runAI(); return;
@@ -871,6 +884,6 @@ window.checkDuplicate=checkDuplicate; window.loadPhoto=loadPhoto;
 window.openCrop=openCrop; window.confirmCrop=confirmCrop; window.drawCrop=drawCrop;
 window.cropDown=cropDown; window.cropMove=cropMove; window.cropUp=cropUp;
 window.updatePhotoThumb=updatePhotoThumb; window.renderList=renderList;
-window.saveGeminiKey=saveGeminiKey; window.loadGeminiKey=loadGeminiKey; window.triggerCamera=triggerCamera; window.triggerGallery=triggerGallery; window.renderProfile=renderProfile; window.updateNavAvatar=updateNavAvatar; window.renderSettings=renderSettings;
+window.saveGeminiKey=saveGeminiKey; window.checkServerVersion=checkServerVersion; window.loadGeminiKey=loadGeminiKey; window.triggerCamera=triggerCamera; window.triggerGallery=triggerGallery; window.renderProfile=renderProfile; window.updateNavAvatar=updateNavAvatar; window.renderSettings=renderSettings;
 window.rotateCrop=rotateCrop; window.rotateCropTo=rotateCropTo; window.resetCrop=resetCrop;
 window.runAI=runAI; window.applyAI=applyAI; window.dismissAI=dismissAI;
