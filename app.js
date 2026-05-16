@@ -11,7 +11,7 @@ const firebaseConfig = {
   messagingSenderId: "594488372191",
   appId: "1:594488372191:web:83f46233b8c4fffe23f26a"
 };
-const APP_VERSION = 'v3.6';
+const APP_VERSION = 'v3.8';
 const GEMINI_KEY_STORAGE = 'tampolas-gemini-key';
 let GEMINI_KEY = '';
 function loadGeminiKey() { GEMINI_KEY = localStorage.getItem(GEMINI_KEY_STORAGE) || ''; }
@@ -62,7 +62,7 @@ async function logout() {
 // ── Gemini ──
 async function analyzePhotoWithAI(base64, mimeType) {
   const prompt = `Você é especialista em tampinhas de garrafas. Analise esta imagem e retorne APENAS um JSON válido sem markdown:
-{"name":"marca + tipo ex: Brahma Duplo Malte","brand":"nome da marca","color":"cor principal da tampinha em português ex: Vermelha Dourada Prata Azul Verde Preta","country":"país de origem — DEDUZA pela marca mesmo que não esteja escrito ex: Brahma=Brasil Heineken=Holanda Budweiser=EUA Corona=México","notes":"design e tipo de bebida"}
+{"name":"marca + nome ex: Brahma Duplo Malte","brand":"nome da marca","type":"tipo de bebida em português: Cerveja, Refrigerante, Água, Energético, Vinho, Suco, Cachaça, Whisky","color":"cor principal da tampinha em português ex: Vermelha, Dourada, Prata, Azul, Verde, Preta","country":"país de origem — DEDUZA pela marca ex: Brahma=Brasil, Heineken=Holanda, Budweiser=EUA","notes":"descrição do design visual"}
 Sempre preencha o country deduzindo pela marca. Retorne SOMENTE o JSON.`;
 
   const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${GEMINI_KEY}`, {
@@ -316,7 +316,7 @@ function buildApp() {
       <button data-action="open-add" style="width:58px;height:58px;border-radius:50%;border:none;cursor:pointer;background:linear-gradient(135deg,${O},#c05500);font-size:30px;color:#fff;box-shadow:0 4px 18px ${O}70;display:flex;align-items:center;justify-content:center">+</button>
     </div>
     <button class="nav-btn" data-scr="profile" data-action="goto-profile" style="flex:1;background:none;border:none;cursor:pointer;display:flex;flex-direction:column;align-items:center;gap:3px;padding:4px 0;color:${T.muted}">
-      <div id="nav-avatar" style="width:30px;height:30px;border-radius:50%;overflow:hidden;background:${T.card2};display:flex;align-items:center;justify-content:center;font-size:17px;border:2px solid ${T.border}">👤</div>
+      <div id="nav-avatar" style="width:30px;height:30px;border-radius:50%;overflow:hidden;background:${T.card2};display:flex;align-items:center;justify-content:center;font-size:17px;border:2px solid ${T.border};pointer-events:none">👤</div>
       <span style="font-size:11px;font-weight:700">Perfil</span>
     </button>
   </div>
@@ -807,6 +807,29 @@ function updateKeyStatus() {
   }
 }
 
+async function checkServerVersion() {
+  const elServer = document.getElementById('profile-version-server');
+  if (elServer) { elServer.textContent = 'verificando...'; elServer.style.color = '#7a6a58'; }
+  try {
+    const res  = await fetch('./app.js?nocache=' + Date.now());
+    const text = await res.text();
+    const m    = text.match(/APP_VERSION\s*=\s*'(v[\d.]+)'/);
+    const serverVer = m ? m[1] : '?';
+    if (elServer) {
+      elServer.textContent = serverVer;
+      elServer.style.color = serverVer === APP_VERSION ? '#22c55e' : '#ef4444';
+    }
+    if (serverVer !== APP_VERSION) {
+      showToast('Nova versão disponível! Limpe o cache.', 'info');
+    } else {
+      showToast('Você está na versão mais recente! ✅', 'ok');
+    }
+  } catch(e) {
+    if (elServer) { elServer.textContent = 'erro'; }
+    showToast('Erro ao verificar versão.', 'err');
+  }
+}
+
 function renderProfile() {
   loadGeminiKey();
   // user info
@@ -835,7 +858,7 @@ function updateNavAvatar() {
   const el = document.getElementById('nav-avatar');
   if (!el) return;
   if (currentUser?.photoURL) {
-    el.innerHTML = '<img src="' + currentUser.photoURL + '" style="width:100%;height:100%;object-fit:cover;border-radius:50%"/>';
+    el.innerHTML = '<img src="' + currentUser.photoURL + '" style="width:100%;height:100%;object-fit:cover;border-radius:50%;pointer-events:none"/>';
     el.style.border = '2px solid ' + O;
   }
 }
