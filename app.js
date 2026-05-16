@@ -11,7 +11,7 @@ const firebaseConfig = {
   messagingSenderId: "594488372191",
   appId: "1:594488372191:web:83f46233b8c4fffe23f26a"
 };
-const APP_VERSION = 'v1.7';
+const APP_VERSION = 'v1.9';
 const GEMINI_KEY = "AIzaSyCGXmgMtEr9vmg35-MZf_ms-Nqp8K5qbyM";
 
 const firebaseApp = initializeApp(firebaseConfig);
@@ -61,7 +61,7 @@ async function analyzePhotoWithAI(base64, mimeType) {
 {"name":"nome identificador (marca+característica, ex: Brahma Vermelha 350ml)","brand":"fabricante/marca","color":"cor predominante em texto (ex: Vermelha, Dourada, Azul)","country":"país de origem","notes":"descrição breve do design e bebida"}
 Se não identificar algum campo deixe string vazia. Retorne SOMENTE o JSON.`;
 
-  const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${GEMINI_KEY}`, {
+  const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${GEMINI_KEY}`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ contents: [{ parts: [{ inline_data: { mime_type: mimeType, data: base64 } }, { text: prompt }] }] })
