@@ -11,9 +11,10 @@ const firebaseConfig = {
   messagingSenderId: "594488372191",
   appId: "1:594488372191:web:83f46233b8c4fffe23f26a"
 };
-const APP_VERSION = 'v2.3';
+const APP_VERSION = 'v2.4';
 const GEMINI_KEY_STORAGE = 'tampolas-gemini-key';
-let GEMINI_KEY = localStorage.getItem(GEMINI_KEY_STORAGE) || '';
+let GEMINI_KEY = '';
+function loadGeminiKey() { GEMINI_KEY = localStorage.getItem(GEMINI_KEY_STORAGE) || ''; }
 
 const firebaseApp = initializeApp(firebaseConfig);
 const auth = getAuth(firebaseApp);
@@ -297,7 +298,7 @@ function buildApp() {
       <button onclick="openAdd()" style="width:58px;height:58px;border-radius:50%;border:none;cursor:pointer;background:linear-gradient(135deg,${O},#c05500);font-size:30px;color:#fff;box-shadow:0 4px 18px ${O}70;display:flex;align-items:center;justify-content:center">+</button>
     </div>
     <button class="nav-btn" data-scr="profile" onclick="goTo('profile');renderProfile()" style="flex:1;background:none;border:none;cursor:pointer;display:flex;flex-direction:column;align-items:center;gap:3px;padding:4px 0;color:${T.muted}">
-      <div id="nav-avatar" style="width:28px;height:28px;border-radius:50%;overflow:hidden;background:${T.card2};display:flex;align-items:center;justify-content:center;font-size:16px;border:2px solid ${T.border}">👤</div>
+      <div id="nav-avatar" style="width:30px;height:30px;border-radius:50%;overflow:hidden;background:${T.card2};display:flex;align-items:center;justify-content:center;font-size:17px;border:2px solid ${T.border}">👤</div>
       <span style="font-size:11px;font-weight:700">Perfil</span>
     </button>
   </div>
@@ -309,7 +310,7 @@ async function runAI() {
   if (!pendingPhotoBase64 || aiLoading) return;
   GEMINI_KEY = localStorage.getItem(GEMINI_KEY_STORAGE) || '';
   if (!GEMINI_KEY) {
-    showToast('Configure a chave Gemini em ⚙️ Config', 'err');
+    showToast('Configure a chave Gemini em 👤 Perfil', 'err');
     return;
   }
   aiLoading = true;
@@ -733,7 +734,7 @@ function saveGeminiKey() {
   const key = input.value.trim();
   if (!key) return showToast('Cole uma chave válida!', 'err');
   localStorage.setItem(GEMINI_KEY_STORAGE, key);
-  GEMINI_KEY = key;
+  loadGeminiKey();
   input.value = '';
   showToast('Chave salva com sucesso!', 'ok');
   updateKeyStatus();
@@ -751,6 +752,7 @@ function updateKeyStatus() {
 }
 
 function renderProfile() {
+  loadGeminiKey();
   // user info
   if (currentUser) {
     const nameEl  = document.getElementById('profile-name');
@@ -781,6 +783,7 @@ function updateNavAvatar() {
 // ── Boot ──
 document.getElementById('app').innerHTML=`<div style="min-height:100vh;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:14px;background:${T.bg}"><div style="font-size:48px;animation:pulse 1.4s ease infinite">🍺</div><div style="color:${T.muted};font-size:14px;font-family:system-ui">Carregando...</div></div>`;
 
+loadGeminiKey();
 onAuthStateChanged(auth, user => {
   currentUser=user; buildApp();
   if (user) { subscribeCaps(); renderHome(); goTo('home'); setTimeout(updateNavAvatar, 500); }
@@ -794,6 +797,6 @@ window.checkDuplicate=checkDuplicate; window.loadPhoto=loadPhoto;
 window.openCrop=openCrop; window.confirmCrop=confirmCrop; window.drawCrop=drawCrop;
 window.cropDown=cropDown; window.cropMove=cropMove; window.cropUp=cropUp;
 window.updatePhotoThumb=updatePhotoThumb; window.renderList=renderList;
-window.saveGeminiKey=saveGeminiKey; window.triggerCamera=triggerCamera; window.triggerGallery=triggerGallery; window.renderProfile=renderProfile; window.updateNavAvatar=updateNavAvatar; window.renderSettings=renderSettings;
+window.saveGeminiKey=saveGeminiKey; window.loadGeminiKey=loadGeminiKey; window.triggerCamera=triggerCamera; window.triggerGallery=triggerGallery; window.renderProfile=renderProfile; window.updateNavAvatar=updateNavAvatar; window.renderSettings=renderSettings;
 window.rotateCrop=rotateCrop; window.rotateCropTo=rotateCropTo; window.resetCrop=resetCrop;
 window.runAI=runAI; window.applyAI=applyAI; window.dismissAI=dismissAI;
