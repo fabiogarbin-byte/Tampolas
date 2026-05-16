@@ -11,7 +11,7 @@ const firebaseConfig = {
   messagingSenderId: "594488372191",
   appId: "1:594488372191:web:83f46233b8c4fffe23f26a"
 };
-const APP_VERSION = 'v2.8';
+const APP_VERSION = 'v2.9';
 const GEMINI_KEY_STORAGE = 'tampolas-gemini-key';
 let GEMINI_KEY = '';
 function loadGeminiKey() { GEMINI_KEY = localStorage.getItem(GEMINI_KEY_STORAGE) || ''; }
@@ -170,7 +170,7 @@ function buildApp() {
           </div>
         </div>
         <div id="ai-btn-wrap" style="display:none;flex-direction:column;gap:8px">
-          <button id="btn-ai" onclick="runAI()" style="width:100%;padding:12px;border-radius:12px;border:1px solid #7c3aed55;background:#7c3aed15;color:#c084fc;font-weight:700;font-size:14px;cursor:pointer;font-family:inherit">✨ Identificar com IA</button>
+          <button id="btn-ai" style="width:100%;padding:12px;border-radius:12px;border:1px solid #7c3aed55;background:#7c3aed15;color:#c084fc;font-weight:700;font-size:14px;cursor:pointer;font-family:inherit">✨ Identificar com IA</button>
           <button id="btn-crop" onclick="openCrop()" style="width:100%;padding:10px;border-radius:12px;border:1px solid ${T.border};background:${T.card2};color:${T.muted};font-weight:700;font-size:13px;cursor:pointer;font-family:inherit">✂️ Ajustar zoom, posição e rotação</button>
         </div>
         <input id="inp-cam" type="file" accept="image/*" capture="environment" style="display:none" onchange="loadPhoto(this.files[0]);this.value=''"/>
@@ -798,6 +798,15 @@ function updateNavAvatar() {
     el.style.border = '2px solid ' + O;
   }
 }
+
+// ── Event delegation — handles dynamically created buttons ──
+document.addEventListener('click', function(e) {
+  const id = e.target.id || e.target.closest('[id]')?.id;
+  if (!id) return;
+  if (id === 'btn-ai')   { e.preventDefault(); runAI(); }
+  if (id === 'btn-save') { e.preventDefault(); saveCap(); }
+  if (id === 'btn-crop') { e.preventDefault(); openCrop(); }
+});
 
 // ── Boot ──
 document.getElementById('app').innerHTML=`<div style="min-height:100vh;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:14px;background:${T.bg}"><div style="font-size:48px;animation:pulse 1.4s ease infinite">🍺</div><div style="color:${T.muted};font-size:14px;font-family:system-ui">Carregando...</div></div>`;
