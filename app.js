@@ -11,7 +11,7 @@ const firebaseConfig = {
   messagingSenderId: "594488372191",
   appId: "1:594488372191:web:83f46233b8c4fffe23f26a"
 };
-const APP_VERSION = 'v2.9';
+const APP_VERSION = 'v3.3';
 const GEMINI_KEY_STORAGE = 'tampolas-gemini-key';
 let GEMINI_KEY = '';
 function loadGeminiKey() { GEMINI_KEY = localStorage.getItem(GEMINI_KEY_STORAGE) || ''; }
@@ -136,7 +136,7 @@ function buildApp() {
   <!-- LIST -->
   <div id="scr-list" class="screen" style="display:none;padding-bottom:90px">
     <div style="padding:52px 16px 14px;display:flex;align-items:center;gap:12px">
-      <button onclick="goTo('home')" style="${btnIconStyle()}">←</button>
+      <button data-action="goto-home" style="${btnIconStyle()}">←</button>
       <div style="flex:1"><div style="font-weight:800;font-size:18px">Coleção</div><div id="list-count" style="font-size:11px;color:${T.muted};margin-top:1px"></div></div>
     </div>
     <div style="padding:0 16px 12px;position:relative">
@@ -150,7 +150,7 @@ function buildApp() {
   <!-- ADD/EDIT -->
   <div id="scr-add" class="screen" style="display:none;padding-bottom:100px">
     <div style="padding:52px 16px 14px;display:flex;align-items:center;gap:12px">
-      <button onclick="cancelAdd()" style="${btnIconStyle()}">←</button>
+      <button data-action="cancel-add" style="${btnIconStyle()}">←</button>
       <div id="add-title" style="font-weight:800;font-size:18px">Nova Tampola</div>
     </div>
     <div id="dup-alert" style="display:none;margin:0 16px 12px;padding:12px 16px;border-radius:12px;background:#2a1500;border:1.5px solid ${O};color:${T.o2};font-size:13px;font-weight:600;line-height:1.5">
@@ -165,13 +165,13 @@ function buildApp() {
             <div style="width:90px;height:90px;border-radius:50%;background:${T.card2};border:2px dashed ${T.border};display:flex;align-items:center;justify-content:center;font-size:32px;flex-shrink:0">🍺</div>
           </div>
           <div style="display:flex;flex-direction:column;gap:8px;flex:1">
-            <button onclick="triggerCamera()" style="width:100%;padding:11px;border-radius:12px;border:1px solid ${O}55;background:${O}12;color:${T.o2};font-weight:700;font-size:14px;cursor:pointer;font-family:inherit">📷 Câmera</button>
-            <button onclick="triggerGallery()" style="width:100%;padding:11px;border-radius:12px;border:1px solid ${T.border};background:${T.card2};color:${T.muted};font-weight:700;font-size:14px;cursor:pointer;font-family:inherit">🖼️ Galeria</button>
+            <button data-action="camera" style="width:100%;padding:11px;border-radius:12px;border:1px solid ${O}55;background:${O}12;color:${T.o2};font-weight:700;font-size:14px;cursor:pointer;font-family:inherit">📷 Câmera</button>
+            <button data-action="gallery" style="width:100%;padding:11px;border-radius:12px;border:1px solid ${T.border};background:${T.card2};color:${T.muted};font-weight:700;font-size:14px;cursor:pointer;font-family:inherit">🖼️ Galeria</button>
           </div>
         </div>
         <div id="ai-btn-wrap" style="display:none;flex-direction:column;gap:8px">
           <button id="btn-ai" style="width:100%;padding:12px;border-radius:12px;border:1px solid #7c3aed55;background:#7c3aed15;color:#c084fc;font-weight:700;font-size:14px;cursor:pointer;font-family:inherit">✨ Identificar com IA</button>
-          <button id="btn-crop" onclick="openCrop()" style="width:100%;padding:10px;border-radius:12px;border:1px solid ${T.border};background:${T.card2};color:${T.muted};font-weight:700;font-size:13px;cursor:pointer;font-family:inherit">✂️ Ajustar zoom, posição e rotação</button>
+          <button id="btn-crop" data-action="open-crop" style="width:100%;padding:10px;border-radius:12px;border:1px solid ${T.border};background:${T.card2};color:${T.muted};font-weight:700;font-size:13px;cursor:pointer;font-family:inherit">✂️ Ajustar zoom, posição e rotação</button>
         </div>
         <input id="inp-cam" type="file" accept="image/*" capture="environment" style="display:none" onchange="loadPhoto(this.files[0]);this.value=''"/>
         <input id="inp-gal" type="file" accept="image/*" style="display:none" onchange="loadPhoto(this.files[0]);this.value=''"/>
@@ -181,8 +181,8 @@ function buildApp() {
         <div style="font-size:11px;font-weight:700;color:#c084fc;letter-spacing:1.5px;margin-bottom:10px">✨ IDENTIFICADO PELA IA</div>
         <div id="ai-result-content"></div>
         <div style="display:flex;gap:8px;margin-top:12px">
-          <button onclick="dismissAI()" style="flex:1;padding:10px;border-radius:10px;border:1px solid ${T.border};background:transparent;color:${T.muted};font-weight:700;font-size:13px;cursor:pointer;font-family:inherit">Ignorar</button>
-          <button onclick="applyAI()" style="flex:2;padding:10px;border-radius:10px;border:none;background:linear-gradient(135deg,#7c3aed,#4f46e5);color:#fff;font-weight:800;font-size:13px;cursor:pointer;font-family:inherit">✅ Usar estes dados</button>
+          <button id="btn-dismiss-ai" style="flex:1;padding:10px;border-radius:10px;border:1px solid ${T.border};background:transparent;color:${T.muted};font-weight:700;font-size:13px;cursor:pointer;font-family:inherit">Ignorar</button>
+          <button id="btn-apply-ai" style="flex:2;padding:10px;border-radius:10px;border:none;background:linear-gradient(135deg,#7c3aed,#4f46e5);color:#fff;font-weight:800;font-size:13px;cursor:pointer;font-family:inherit">✅ Usar estes dados</button>
         </div>
       </div>
 
@@ -195,7 +195,7 @@ function buildApp() {
       <div><div style="${lblStyle()}">Quantidade</div><input id="f-quantity" type="number" min="1" value="1" style="${inpStyle()}"/></div>
       <div><div style="${lblStyle()}">Notas</div><textarea id="f-notes" placeholder="Raridade, origem, detalhes..." rows="3" style="${inpStyle()};resize:vertical;line-height:1.5"></textarea></div>
 
-      <button id="btn-save" onclick="saveCap()" style="width:100%;padding:16px;border-radius:14px;border:none;background:linear-gradient(135deg,${O},#c05500);color:#fff;font-weight:800;font-size:16px;cursor:pointer;font-family:inherit;box-shadow:0 6px 20px ${O}40;margin-bottom:8px">SALVAR TAMPOLA</button>
+      <button id="btn-save" style="width:100%;padding:16px;border-radius:14px;border:none;background:linear-gradient(135deg,${O},#c05500);color:#fff;font-weight:800;font-size:16px;cursor:pointer;font-family:inherit;box-shadow:0 6px 20px ${O}40;margin-bottom:8px">SALVAR TAMPOLA</button>
     </div>
   </div>
 
@@ -205,7 +205,7 @@ function buildApp() {
   <!-- CROP com rotação -->
   <div id="scr-crop" class="screen" style="display:none;padding-bottom:40px">
     <div style="padding:52px 16px 14px;display:flex;align-items:center;gap:12px">
-      <button onclick="goTo('add')" style="${btnIconStyle()}">←</button>
+      <button data-action="goto-add" style="${btnIconStyle()}">←</button>
       <div style="font-weight:800;font-size:18px">Ajustar Foto</div>
     </div>
     <div style="font-size:12px;color:${T.muted};margin-bottom:14px;text-align:center;padding:0 16px">
@@ -220,31 +220,31 @@ function buildApp() {
       <div>
         <div style="${lblStyle()}">Zoom</div>
         <input id="zoom-slider" type="range" min="1" max="4" step="0.05" value="1"
-          oninput="cropScale=parseFloat(this.value);drawCrop()"
+          data-action="zoom-change"
           style="width:100%;accent-color:${O}"/>
       </div>
       <div>
         <div style="${lblStyle()}">Rotação</div>
         <div style="display:flex;align-items:center;gap:10px">
-          <button onclick="rotateCrop(-15)"
+          <button data-action="rotate-left"
             style="width:44px;height:44px;border-radius:10px;border:1px solid ${T.border};background:${T.card2};color:${T.text};font-size:20px;cursor:pointer;flex-shrink:0;font-family:inherit">↺</button>
           <input id="rotate-slider" type="range" min="-180" max="180" step="1" value="0"
-            oninput="rotateCropTo(parseFloat(this.value))"
+            data-action="rotate-change"
             style="flex:1;accent-color:${O}"/>
-          <button onclick="rotateCrop(15)"
+          <button data-action="rotate-right"
             style="width:44px;height:44px;border-radius:10px;border:1px solid ${T.border};background:${T.card2};color:${T.text};font-size:20px;cursor:pointer;flex-shrink:0;font-family:inherit">↻</button>
         </div>
         <div style="text-align:center;font-size:12px;color:${T.muted};margin-top:4px" id="rotate-label">0°</div>
       </div>
-      <button onclick="resetCrop()"
+      <button data-action="reset-crop"
         style="padding:10px;border-radius:10px;border:1px solid ${T.border};background:${T.card2};color:${T.muted};font-weight:700;font-size:13px;cursor:pointer;font-family:inherit">
         ↺ Resetar
       </button>
     </div>
 
     <div style="padding:16px;display:flex;gap:10px">
-      <button onclick="goTo('add')" style="flex:1;padding:16px;border-radius:14px;border:1px solid ${T.border};background:${T.card};color:${T.muted};font-weight:700;font-size:15px;cursor:pointer;font-family:inherit">Cancelar</button>
-      <button onclick="confirmCrop()" style="flex:2;padding:16px;border-radius:14px;border:none;background:linear-gradient(135deg,${O},#c05500);color:#fff;font-weight:800;font-size:16px;cursor:pointer;font-family:inherit;box-shadow:0 4px 16px ${O}50">✓ Confirmar Foto</button>
+      <button data-action="goto-add" style="flex:1;padding:16px;border-radius:14px;border:1px solid ${T.border};background:${T.card};color:${T.muted};font-weight:700;font-size:15px;cursor:pointer;font-family:inherit">Cancelar</button>
+      <button id="btn-confirm-crop" style="flex:2;padding:16px;border-radius:14px;border:none;background:linear-gradient(135deg,${O},#c05500);color:#fff;font-weight:800;font-size:16px;cursor:pointer;font-family:inherit;box-shadow:0 4px 16px ${O}50">✓ Confirmar Foto</button>
     </div>
   </div>
 
@@ -252,7 +252,7 @@ function buildApp() {
   <!-- PROFILE -->
   <div id="scr-profile" class="screen" style="display:none;padding-bottom:90px">
     <div style="padding:52px 16px 14px;display:flex;align-items:center;gap:12px">
-      <button onclick="goTo('home')" style="${btnIconStyle()}">←</button>
+      <button data-action="goto-home" style="${btnIconStyle()}">←</button>
       <div style="font-weight:800;font-size:18px">Perfil</div>
     </div>
     <div style="padding:0 16px;display:flex;flex-direction:column;gap:14px">
@@ -276,12 +276,12 @@ function buildApp() {
         </div>
         <input id="gemini-key-input" type="password" placeholder="Cole sua API key aqui..."
           style="width:100%;background:#1a1510;border:1.5px solid ${T.border};color:${T.text};border-radius:12px;padding:12px 14px;font-size:14px;outline:none;font-family:inherit;box-sizing:border-box;margin-bottom:10px"/>
-        <button onclick="saveGeminiKey()" style="width:100%;padding:13px;border-radius:12px;border:none;background:linear-gradient(135deg,${O},#c05500);color:#fff;font-weight:800;font-size:14px;cursor:pointer;font-family:inherit">SALVAR CHAVE</button>
+        <button data-action="save-key" style="width:100%;padding:13px;border-radius:12px;border:none;background:linear-gradient(135deg,${O},#c05500);color:#fff;font-weight:800;font-size:14px;cursor:pointer;font-family:inherit">SALVAR CHAVE</button>
         <div id="key-status" style="margin-top:10px;font-size:12px;text-align:center"></div>
       </div>
 
       <!-- Logout -->
-      <button onclick="logout()" style="width:100%;padding:14px;border-radius:14px;border:1px solid #401010;background:#200505;color:#ef4444;font-weight:800;font-size:15px;cursor:pointer;font-family:inherit">
+      <button data-action="logout" style="width:100%;padding:14px;border-radius:14px;border:1px solid #401010;background:#200505;color:#ef4444;font-weight:800;font-size:15px;cursor:pointer;font-family:inherit">
         Sair da conta
       </button>
 
@@ -290,16 +290,16 @@ function buildApp() {
 
   <!-- NAV -->
   <div id="bottom-nav" style="position:fixed;bottom:0;left:50%;transform:translateX(-50%);width:100%;max-width:480px;background:rgba(14,12,10,.96);border-top:1px solid ${T.border};padding:10px 8px 22px;display:flex;align-items:center;z-index:100;backdrop-filter:blur(12px)">
-    <button class="nav-btn" data-scr="home" onclick="goTo('home')" style="flex:1;background:none;border:none;cursor:pointer;display:flex;flex-direction:column;align-items:center;gap:3px;padding:4px 0;color:${T.muted}">
+    <button class="nav-btn" data-scr="home" data-action="goto-home" style="flex:1;background:none;border:none;cursor:pointer;display:flex;flex-direction:column;align-items:center;gap:3px;padding:4px 0;color:${T.muted}">
       <span style="font-size:28px">🏠</span><span style="font-size:11px;font-weight:700">Início</span>
     </button>
-    <button class="nav-btn" data-scr="list" onclick="goTo('list');renderList()" style="flex:1;background:none;border:none;cursor:pointer;display:flex;flex-direction:column;align-items:center;gap:3px;padding:4px 0;color:${T.muted}">
+    <button class="nav-btn" data-scr="list" data-action="goto-list" style="flex:1;background:none;border:none;cursor:pointer;display:flex;flex-direction:column;align-items:center;gap:3px;padding:4px 0;color:${T.muted}">
       <span style="font-size:28px">📋</span><span style="font-size:11px;font-weight:700">Coleção</span>
     </button>
     <div style="flex:1;display:flex;justify-content:center">
-      <button onclick="openAdd()" style="width:58px;height:58px;border-radius:50%;border:none;cursor:pointer;background:linear-gradient(135deg,${O},#c05500);font-size:30px;color:#fff;box-shadow:0 4px 18px ${O}70;display:flex;align-items:center;justify-content:center">+</button>
+      <button data-action="open-add" style="width:58px;height:58px;border-radius:50%;border:none;cursor:pointer;background:linear-gradient(135deg,${O},#c05500);font-size:30px;color:#fff;box-shadow:0 4px 18px ${O}70;display:flex;align-items:center;justify-content:center">+</button>
     </div>
-    <button class="nav-btn" data-scr="profile" onclick="goTo('profile');renderProfile()" style="flex:1;background:none;border:none;cursor:pointer;display:flex;flex-direction:column;align-items:center;gap:3px;padding:4px 0;color:${T.muted}">
+    <button class="nav-btn" data-scr="profile" data-action="goto-profile" style="flex:1;background:none;border:none;cursor:pointer;display:flex;flex-direction:column;align-items:center;gap:3px;padding:4px 0;color:${T.muted}">
       <div id="nav-avatar" style="width:30px;height:30px;border-radius:50%;overflow:hidden;background:${T.card2};display:flex;align-items:center;justify-content:center;font-size:17px;border:2px solid ${T.border}">👤</div>
       <span style="font-size:11px;font-weight:700">Perfil</span>
     </button>
@@ -549,7 +549,7 @@ function updatePhotoThumb() {
   if (pendingPhoto) {
     thumb.innerHTML=`<div style="position:relative;width:90px;height:90px;flex-shrink:0">
       <img src="${pendingPhoto}" style="width:90px;height:90px;border-radius:50%;object-fit:cover;border:2px solid ${O}"/>
-      <button onclick="pendingPhoto=null;pendingPhotoBase64=null;originalPhotoBase64=null;updatePhotoThumb()" style="position:absolute;top:-4px;right:-4px;background:#200505;border:1px solid #ef4444;color:#ef4444;border-radius:50%;width:24px;height:24px;cursor:pointer;font-size:12px;display:flex;align-items:center;justify-content:center;font-family:inherit">✕</button>
+      <button data-action="remove-photo" style="position:absolute;top:-4px;right:-4px;background:#200505;border:1px solid #ef4444;color:#ef4444;border-radius:50%;width:24px;height:24px;cursor:pointer;font-size:12px;display:flex;align-items:center;justify-content:center;font-family:inherit">✕</button>
     </div>`;
     if (aiBtnWrap) aiBtnWrap.style.display='flex';
   } else {
@@ -661,7 +661,7 @@ function renderHome() {
       <div style="width:42px;height:42px;border-radius:12px;background:linear-gradient(135deg,${O},#c05500);display:flex;align-items:center;justify-content:center;font-size:22px;box-shadow:0 4px 14px ${O}40;flex-shrink:0">🍺</div>
       <div style="flex:1"><div style="font-weight:800;font-size:22px;letter-spacing:-.3px">Tampolas</div><div style="font-size:12px;color:${T.muted}">${currentUser?.displayName||'Minha coleção'}</div></div><div style="font-size:10px;font-weight:700;color:${T.dim};background:${T.card2};border:1px solid ${T.border};border-radius:8px;padding:3px 8px;flex-shrink:0">${APP_VERSION}</div>
     </div>
-    <div onclick="goTo('list');renderList()" style="margin:0 16px 14px;border-radius:20px;overflow:hidden;cursor:pointer">
+    <div data-action="goto-list" style="margin:0 16px 14px;border-radius:20px;overflow:hidden;cursor:pointer">
       <div style="background:linear-gradient(135deg,${O},#ffaa00 55%,#ffcc44);padding:24px 20px;position:relative;overflow:hidden">
         <div style="font-size:11px;font-weight:700;letter-spacing:2px;color:rgba(0,0,0,.45);text-transform:uppercase">Total de Tampolas</div>
         <div style="font-size:64px;font-weight:900;color:#fff;line-height:1;margin:4px 0;text-shadow:0 2px 10px rgba(0,0,0,.2)">${caps.length}</div>
@@ -686,7 +686,7 @@ function renderHome() {
     ${recent.length?`
     <div style="display:flex;justify-content:space-between;align-items:center;padding:0 16px;margin-bottom:8px">
       <span style="font-size:11px;font-weight:700;color:${T.muted};letter-spacing:1px;text-transform:uppercase">Recentes</span>
-      <span onclick="goTo('list');renderList()" style="font-size:12px;color:${O};font-weight:700;cursor:pointer">Ver todas</span>
+      <span data-action="goto-list" style="font-size:12px;color:${O};font-weight:700;cursor:pointer">Ver todas</span>
     </div>
     ${recent.map(c=>capRowHTML(c)).join('')}`:''}`;
 }
@@ -707,7 +707,7 @@ function capRowHTML(cap) {
   const thumb=cap.photo
     ?`<div style="width:50px;height:50px;border-radius:50%;overflow:hidden;border:2px solid rgba(255,255,255,.08);flex-shrink:0"><img src="${cap.photo}" style="width:100%;height:100%;object-fit:cover"/></div>`
     :`<div style="width:50px;height:50px;border-radius:50%;background:${O};display:flex;align-items:center;justify-content:center;font-size:22px;border:2px solid rgba(255,255,255,.08);flex-shrink:0">🍺</div>`;
-  return `<div onclick="openDetail('${cap.id}')" style="display:flex;align-items:center;gap:12px;padding:12px 14px;border-radius:16px;cursor:pointer;margin:0 16px 8px;border:1px solid ${T.border};background:${T.card}">
+  return `<div data-action="open-detail" data-id="${cap.id}" style="display:flex;align-items:center;gap:12px;padding:12px 14px;border-radius:16px;cursor:pointer;margin:0 16px 8px;border:1px solid ${T.border};background:${T.card}">
     ${thumb}
     <div style="flex:1;min-width:0">
       <div style="font-weight:700;font-size:15px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${cap.name}</div>
@@ -728,7 +728,7 @@ function renderDetail(id) {
     <div style="position:relative;height:280px;overflow:hidden">
       ${cap.photo?`<img src="${cap.photo}" style="width:100%;height:100%;object-fit:cover"/>`:`<div style="width:100%;height:100%;background:linear-gradient(160deg,${O}55,${T.bg});display:flex;align-items:center;justify-content:center;font-size:110px">🍺</div>`}
       <div style="position:absolute;inset:0;background:linear-gradient(to bottom,rgba(0,0,0,.15),rgba(20,18,16,.97))"></div>
-      <button onclick="goTo('list');renderList()" style="position:absolute;top:52px;left:16px;background:rgba(0,0,0,.45);border:1px solid rgba(255,255,255,.1);color:${T.text};border-radius:10px;padding:8px 12px;cursor:pointer;font-size:18px">←</button>
+      <button data-action="goto-list" style="position:absolute;top:52px;left:16px;background:rgba(0,0,0,.45);border:1px solid rgba(255,255,255,.1);color:${T.text};border-radius:10px;padding:8px 12px;cursor:pointer;font-size:18px">←</button>
       <div style="position:absolute;bottom:16px;left:16px;right:16px">
         <div style="font-weight:900;font-size:26px;text-shadow:0 2px 8px rgba(0,0,0,.8)">${cap.name}</div>
         ${cap.brand?`<div style="color:rgba(255,255,255,.55);font-size:14px;margin-top:4px">${cap.brand}</div>`:''}
@@ -740,8 +740,8 @@ function renderDetail(id) {
       </div>
       ${cap.notes?`<div style="background:${T.card};border-radius:14px;padding:14px 16px;border:1px solid ${T.border};margin-bottom:12px"><div style="font-size:11px;color:${T.muted};font-weight:600;margin-bottom:6px">📝 Notas</div><div style="font-size:14px;color:#c0a888;line-height:1.6">${cap.notes}</div></div>`:''}
       <div style="display:flex;gap:10px">
-        <button onclick='openEdit(${JSON.stringify(cap).replace(/'/g,"&#39;")})' style="flex:1;padding:14px;border-radius:14px;border:1px solid ${T.border};background:${T.card};color:${T.text};font-weight:700;font-size:14px;cursor:pointer;font-family:inherit">✏️ Editar</button>
-        <button onclick="deleteCap('${cap.id}')" style="padding:14px 18px;border-radius:14px;border:1px solid #401010;background:#200505;color:#ef4444;font-weight:700;font-size:14px;cursor:pointer;font-family:inherit">🗑</button>
+        <button data-action="edit-cap" data-id="${cap.id}" style="flex:1;padding:14px;border-radius:14px;border:1px solid ${T.border};background:${T.card};color:${T.text};font-weight:700;font-size:14px;cursor:pointer;font-family:inherit">✏️ Editar</button>
+        <button data-action="delete-cap" data-id="${cap.id}" style="padding:14px 18px;border-radius:14px;border:1px solid #401010;background:#200505;color:#ef4444;font-weight:700;font-size:14px;cursor:pointer;font-family:inherit">🗑</button>
       </div>
     </div>`;
 }
@@ -801,11 +801,57 @@ function updateNavAvatar() {
 
 // ── Event delegation — handles dynamically created buttons ──
 document.addEventListener('click', function(e) {
-  const id = e.target.id || e.target.closest('[id]')?.id;
-  if (!id) return;
-  if (id === 'btn-ai')   { e.preventDefault(); runAI(); }
-  if (id === 'btn-save') { e.preventDefault(); saveCap(); }
-  if (id === 'btn-crop') { e.preventDefault(); openCrop(); }
+  const el = e.target.closest('[data-action],[id]');
+  if (!el) return;
+
+  const action = el.dataset.action;
+  const id     = el.id;
+
+  // Handle data-action
+  switch(action) {
+    case 'goto-home':    goTo('home'); return;
+    case 'goto-list':    goTo('list'); renderList(); return;
+    case 'goto-add':     goTo('add'); return;
+    case 'goto-profile': goTo('profile'); renderProfile(); return;
+    case 'cancel-add':   cancelAdd(); return;
+    case 'open-add':     openAdd(); return;
+    case 'camera':       triggerCamera(); return;
+    case 'gallery':      triggerGallery(); return;
+    case 'open-crop':    openCrop(); return;
+    case 'rotate-left':  rotateCrop(-15); return;
+    case 'rotate-right': rotateCrop(15); return;
+    case 'reset-crop':   resetCrop(); return;
+    case 'save-key':     saveGeminiKey(); return;
+    case 'logout':       logout(); return;
+    case 'remove-photo': pendingPhoto=null; pendingPhotoBase64=null; originalPhotoBase64=null; updatePhotoThumb(); return;
+  }
+
+  // data-action with dynamic id
+  const dataId = el.dataset.id;
+  if (action === 'open-detail' && dataId) { openDetail(dataId); return; }
+  if (action === 'edit-cap'    && dataId) {
+    const cap = caps.find(c => c.id === dataId);
+    if (cap) openEdit(cap);
+    return;
+  }
+  if (action === 'delete-cap' && dataId) { deleteCap(dataId); return; }
+
+  // Handle id-based buttons
+  switch(id) {
+    case 'btn-ai':          runAI(); return;
+    case 'btn-save':        saveCap(); return;
+    case 'btn-crop':        openCrop(); return;
+    case 'btn-apply-ai':    applyAI(); return;
+    case 'btn-dismiss-ai':  dismissAI(); return;
+    case 'btn-confirm-crop':confirmCrop(); return;
+  }
+});
+
+// Slider input delegation
+document.addEventListener('input', function(e) {
+  const action = e.target.dataset.action;
+  if (action === 'zoom-change')   { cropScale = parseFloat(e.target.value); drawCrop(); }
+  if (action === 'rotate-change') { rotateCropTo(parseFloat(e.target.value)); }
 });
 
 // ── Boot ──
