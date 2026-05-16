@@ -11,7 +11,7 @@ const firebaseConfig = {
   messagingSenderId: "594488372191",
   appId: "1:594488372191:web:83f46233b8c4fffe23f26a"
 };
-const APP_VERSION = 'v2.0';
+const APP_VERSION = 'v2.3';
 const GEMINI_KEY_STORAGE = 'tampolas-gemini-key';
 let GEMINI_KEY = localStorage.getItem(GEMINI_KEY_STORAGE) || '';
 
@@ -58,9 +58,9 @@ async function logout() {
 
 // ── Gemini ──
 async function analyzePhotoWithAI(base64, mimeType) {
-  const prompt = `Analise esta imagem de tampinha de garrafa e retorne APENAS um JSON válido sem markdown:
-{"name":"nome identificador (marca+característica, ex: Brahma Vermelha 350ml)","brand":"fabricante/marca","color":"cor predominante em texto (ex: Vermelha, Dourada, Azul)","country":"país de origem","notes":"descrição breve do design e bebida"}
-Se não identificar algum campo deixe string vazia. Retorne SOMENTE o JSON.`;
+  const prompt = `Você é especialista em tampinhas de garrafas. Analise esta imagem e retorne APENAS um JSON válido sem markdown:
+{"name":"marca + tipo ex: Brahma Duplo Malte","brand":"nome da marca","color":"cor principal da tampinha em português ex: Vermelha Dourada Prata Azul Verde Preta","country":"país de origem — DEDUZA pela marca mesmo que não esteja escrito ex: Brahma=Brasil Heineken=Holanda Budweiser=EUA Corona=México","notes":"design e tipo de bebida"}
+Sempre preencha o country deduzindo pela marca. Retorne SOMENTE o JSON.`;
 
   const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${GEMINI_KEY}`, {
     method: 'POST',
@@ -164,16 +164,16 @@ function buildApp() {
             <div style="width:90px;height:90px;border-radius:50%;background:${T.card2};border:2px dashed ${T.border};display:flex;align-items:center;justify-content:center;font-size:32px;flex-shrink:0">🍺</div>
           </div>
           <div style="display:flex;flex-direction:column;gap:8px;flex:1">
-            <button onclick="document.getElementById('inp-cam').click()" style="width:100%;padding:11px;border-radius:12px;border:1px solid ${O}55;background:${O}12;color:${T.o2};font-weight:700;font-size:14px;cursor:pointer;font-family:inherit">📷 Câmera</button>
-            <button onclick="document.getElementById('inp-gal').click()" style="width:100%;padding:11px;border-radius:12px;border:1px solid ${T.border};background:${T.card2};color:${T.muted};font-weight:700;font-size:14px;cursor:pointer;font-family:inherit">🖼️ Galeria</button>
+            <button onclick="triggerCamera()" style="width:100%;padding:11px;border-radius:12px;border:1px solid ${O}55;background:${O}12;color:${T.o2};font-weight:700;font-size:14px;cursor:pointer;font-family:inherit">📷 Câmera</button>
+            <button onclick="triggerGallery()" style="width:100%;padding:11px;border-radius:12px;border:1px solid ${T.border};background:${T.card2};color:${T.muted};font-weight:700;font-size:14px;cursor:pointer;font-family:inherit">🖼️ Galeria</button>
           </div>
         </div>
         <div id="ai-btn-wrap" style="display:none;flex-direction:column;gap:8px">
           <button id="btn-ai" onclick="runAI()" style="width:100%;padding:12px;border-radius:12px;border:1px solid #7c3aed55;background:#7c3aed15;color:#c084fc;font-weight:700;font-size:14px;cursor:pointer;font-family:inherit">✨ Identificar com IA</button>
           <button id="btn-crop" onclick="openCrop()" style="width:100%;padding:10px;border-radius:12px;border:1px solid ${T.border};background:${T.card2};color:${T.muted};font-weight:700;font-size:13px;cursor:pointer;font-family:inherit">✂️ Ajustar zoom, posição e rotação</button>
         </div>
-        <input id="inp-cam" type="file" accept="image/*" capture="environment" style="display:none" onchange="loadPhoto(this.files[0])"/>
-        <input id="inp-gal" type="file" accept="image/*" style="display:none" onchange="loadPhoto(this.files[0])"/>
+        <input id="inp-cam" type="file" accept="image/*" capture="environment" style="display:none" onchange="loadPhoto(this.files[0]);this.value=''"/>
+        <input id="inp-gal" type="file" accept="image/*" style="display:none" onchange="loadPhoto(this.files[0]);this.value=''"/>
       </div>
 
       <div id="ai-result" style="display:none;background:#1a0a2a;border:1.5px solid #7c3aed55;border-radius:14px;padding:14px">
@@ -246,32 +246,41 @@ function buildApp() {
   </div>
 
 
-  <!-- SETTINGS -->
-  <div id="scr-settings" class="screen" style="display:none;padding-bottom:90px">
+  <!-- PROFILE -->
+  <div id="scr-profile" class="screen" style="display:none;padding-bottom:90px">
     <div style="padding:52px 16px 14px;display:flex;align-items:center;gap:12px">
       <button onclick="goTo('home')" style="${btnIconStyle()}">←</button>
-      <div style="font-weight:800;font-size:18px">Configurações</div>
+      <div style="font-weight:800;font-size:18px">Perfil</div>
     </div>
-    <div style="padding:0 16px;display:flex;flex-direction:column;gap:16px">
+    <div style="padding:0 16px;display:flex;flex-direction:column;gap:14px">
 
+      <!-- User card -->
+      <div style="background:${T.card};border-radius:16px;padding:20px;border:1px solid ${T.border};display:flex;align-items:center;gap:16px">
+        <div id="profile-avatar" style="width:64px;height:64px;border-radius:50%;background:${T.card2};border:2px solid ${T.border};flex-shrink:0;overflow:hidden;display:flex;align-items:center;justify-content:center;font-size:28px">👤</div>
+        <div>
+          <div id="profile-name" style="font-weight:800;font-size:17px"></div>
+          <div id="profile-email" style="font-size:12px;color:${T.muted};margin-top:3px"></div>
+          <div id="profile-stats" style="font-size:12px;color:${T.o2};margin-top:4px"></div>
+        </div>
+      </div>
+
+      <!-- Gemini API Key -->
       <div style="background:${T.card};border-radius:16px;padding:18px;border:1px solid ${T.border}">
         <div style="font-size:14px;font-weight:800;margin-bottom:6px">🤖 Chave da API Gemini</div>
-        <div style="font-size:12px;color:${T.muted};margin-bottom:14px;line-height:1.5">
+        <div style="font-size:12px;color:${T.muted};margin-bottom:12px;line-height:1.5">
           Necessária para identificar tampolas por foto com IA.<br/>
           Crie gratuitamente em <b style="color:${T.o2}">aistudio.google.com</b>
         </div>
         <input id="gemini-key-input" type="password" placeholder="Cole sua API key aqui..."
           style="width:100%;background:#1a1510;border:1.5px solid ${T.border};color:${T.text};border-radius:12px;padding:12px 14px;font-size:14px;outline:none;font-family:inherit;box-sizing:border-box;margin-bottom:10px"/>
-        <button onclick="saveGeminiKey()" style="width:100%;padding:13px;border-radius:12px;border:none;background:linear-gradient(135deg,${O},#c05500);color:#fff;font-weight:800;font-size:14px;cursor:pointer;font-family:inherit">
-          SALVAR CHAVE
-        </button>
+        <button onclick="saveGeminiKey()" style="width:100%;padding:13px;border-radius:12px;border:none;background:linear-gradient(135deg,${O},#c05500);color:#fff;font-weight:800;font-size:14px;cursor:pointer;font-family:inherit">SALVAR CHAVE</button>
         <div id="key-status" style="margin-top:10px;font-size:12px;text-align:center"></div>
       </div>
 
-      <div style="background:${T.card};border-radius:16px;padding:18px;border:1px solid ${T.border}">
-        <div style="font-size:14px;font-weight:800;margin-bottom:10px">📊 Coleção</div>
-        <div style="font-size:13px;color:${T.muted}" id="settings-stats"></div>
-      </div>
+      <!-- Logout -->
+      <button onclick="logout()" style="width:100%;padding:14px;border-radius:14px;border:1px solid #401010;background:#200505;color:#ef4444;font-weight:800;font-size:15px;cursor:pointer;font-family:inherit">
+        Sair da conta
+      </button>
 
     </div>
   </div>
@@ -287,8 +296,9 @@ function buildApp() {
     <div style="flex:1;display:flex;justify-content:center">
       <button onclick="openAdd()" style="width:58px;height:58px;border-radius:50%;border:none;cursor:pointer;background:linear-gradient(135deg,${O},#c05500);font-size:30px;color:#fff;box-shadow:0 4px 18px ${O}70;display:flex;align-items:center;justify-content:center">+</button>
     </div>
-    <button class="nav-btn" data-scr="settings" onclick="goTo('settings');renderSettings()" style="flex:1;background:none;border:none;cursor:pointer;display:flex;flex-direction:column;align-items:center;gap:3px;padding:4px 0;color:${T.muted}">
-      <span style="font-size:28px">⚙️</span><span style="font-size:11px;font-weight:700">Config</span>
+    <button class="nav-btn" data-scr="profile" onclick="goTo('profile');renderProfile()" style="flex:1;background:none;border:none;cursor:pointer;display:flex;flex-direction:column;align-items:center;gap:3px;padding:4px 0;color:${T.muted}">
+      <div id="nav-avatar" style="width:28px;height:28px;border-radius:50%;overflow:hidden;background:${T.card2};display:flex;align-items:center;justify-content:center;font-size:16px;border:2px solid ${T.border}">👤</div>
+      <span style="font-size:11px;font-weight:700">Perfil</span>
     </button>
   </div>
   <div id="toast-el"></div>`;
@@ -397,18 +407,53 @@ async function saveCap() {
   if (!form.name) return showToast('Nome obrigatório!','err');
   const btn=document.getElementById('btn-save');
   if (btn) { btn.disabled=true; btn.textContent='Salvando...'; }
+
+  // timeout de segurança: se travar por mais de 10s libera o botão
+  const timeout = setTimeout(() => {
+    if (btn) { btn.disabled=false; btn.textContent=editingId?'SALVAR ALTERAÇÕES':'SALVAR TAMPOLA'; }
+    showToast('Tempo esgotado. Verifique sua conexão.', 'err');
+  }, 10000);
+
   try {
+    // foto grande demais pode travar — reduz se necessário
+    if (form.photo && form.photo.length > 500000) {
+      form.photo = await compressPhoto(form.photo);
+    }
     if (editingId) {
-      await dbUpdate(editingId, form); showToast('Atualizada!');
+      await dbUpdate(editingId, form); clearTimeout(timeout);
+      showToast('Atualizada!');
       currentCapId=editingId; editingId=null; goTo('detail');
     } else {
-      await dbAdd(form); showToast('Tampola adicionada!');
+      await dbAdd(form); clearTimeout(timeout);
+      showToast('Tampola adicionada!');
       editingId=null; goTo('list');
     }
   } catch(e) {
-    showToast('Erro ao salvar.','err');
+    clearTimeout(timeout);
+    console.error('Save error:', e);
+    showToast('Erro: ' + (e.message||'Tente novamente'), 'err');
     if (btn) { btn.disabled=false; btn.textContent=editingId?'SALVAR ALTERAÇÕES':'SALVAR TAMPOLA'; }
   }
+}
+
+// comprime foto para menos de 500kb
+function compressPhoto(dataUrl) {
+  return new Promise(resolve => {
+    const img = new Image();
+    img.onload = () => {
+      const canvas = document.createElement('canvas');
+      const MAX = 600;
+      let w = img.width, h = img.height;
+      if (w > MAX || h > MAX) {
+        if (w > h) { h = Math.round(h * MAX / w); w = MAX; }
+        else       { w = Math.round(w * MAX / h); h = MAX; }
+      }
+      canvas.width = w; canvas.height = h;
+      canvas.getContext('2d').drawImage(img, 0, 0, w, h);
+      resolve(canvas.toDataURL('image/jpeg', 0.7));
+    };
+    img.src = dataUrl;
+  });
 }
 
 async function deleteCap(id) {
@@ -544,6 +589,16 @@ function resetCrop() {
   if (rSlider) rSlider.value = 0;
   if (label)   label.textContent = '0°';
   drawCrop();
+}
+
+function triggerCamera() {
+  const el = document.getElementById('inp-cam');
+  if (el) { el.value = ''; el.click(); }
+}
+
+function triggerGallery() {
+  const el = document.getElementById('inp-gal');
+  if (el) { el.value = ''; el.click(); }
 }
 
 function cropDown(e) {
@@ -695,12 +750,32 @@ function updateKeyStatus() {
   }
 }
 
-function renderSettings() {
+function renderProfile() {
+  // user info
+  if (currentUser) {
+    const nameEl  = document.getElementById('profile-name');
+    const emailEl = document.getElementById('profile-email');
+    const statsEl = document.getElementById('profile-stats');
+    const avatarEl= document.getElementById('profile-avatar');
+    if (nameEl)  nameEl.textContent  = currentUser.displayName || 'Usuário';
+    if (emailEl) emailEl.textContent = currentUser.email || '';
+    if (statsEl) statsEl.textContent = caps.length + ' tampola' + (caps.length!==1?'s':'') + ' na coleção';
+    if (avatarEl && currentUser.photoURL) {
+      avatarEl.innerHTML = '<img src="' + currentUser.photoURL + '" style="width:100%;height:100%;object-fit:cover"/>';
+    }
+  }
   const input = document.getElementById('gemini-key-input');
   if (input) input.value = '';
   updateKeyStatus();
-  const stats = document.getElementById('settings-stats');
-  if (stats) stats.innerHTML = caps.length + ' tampola' + (caps.length !== 1 ? 's' : '') + ' cadastrada' + (caps.length !== 1 ? 's' : '');
+}
+
+function updateNavAvatar() {
+  const el = document.getElementById('nav-avatar');
+  if (!el) return;
+  if (currentUser?.photoURL) {
+    el.innerHTML = '<img src="' + currentUser.photoURL + '" style="width:100%;height:100%;object-fit:cover;border-radius:50%"/>';
+    el.style.border = '2px solid ' + O;
+  }
 }
 
 // ── Boot ──
@@ -708,7 +783,7 @@ document.getElementById('app').innerHTML=`<div style="min-height:100vh;display:f
 
 onAuthStateChanged(auth, user => {
   currentUser=user; buildApp();
-  if (user) { subscribeCaps(); renderHome(); goTo('home'); }
+  if (user) { subscribeCaps(); renderHome(); goTo('home'); setTimeout(updateNavAvatar, 500); }
   else { if(unsubCaps){unsubCaps();unsubCaps=null;} caps=[]; goTo('login'); }
 });
 
@@ -719,6 +794,6 @@ window.checkDuplicate=checkDuplicate; window.loadPhoto=loadPhoto;
 window.openCrop=openCrop; window.confirmCrop=confirmCrop; window.drawCrop=drawCrop;
 window.cropDown=cropDown; window.cropMove=cropMove; window.cropUp=cropUp;
 window.updatePhotoThumb=updatePhotoThumb; window.renderList=renderList;
-window.saveGeminiKey=saveGeminiKey; window.renderSettings=renderSettings;
+window.saveGeminiKey=saveGeminiKey; window.triggerCamera=triggerCamera; window.triggerGallery=triggerGallery; window.renderProfile=renderProfile; window.updateNavAvatar=updateNavAvatar; window.renderSettings=renderSettings;
 window.rotateCrop=rotateCrop; window.rotateCropTo=rotateCropTo; window.resetCrop=resetCrop;
 window.runAI=runAI; window.applyAI=applyAI; window.dismissAI=dismissAI;
