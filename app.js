@@ -17,6 +17,8 @@ const firebaseConfig = {
   appId: "1:594488372191:web:83f46233b8c4fffe23f26a"
 };
 
+const GEMINI_KEY = "AIzaSyCGXmgMtEr9vmg35-MZf_ms-Nqp8K5qbyM";
+
 const firebaseApp = initializeApp(firebaseConfig);
 const auth = getAuth(firebaseApp);
 const db   = getFirestore(firebaseApp);
@@ -28,7 +30,7 @@ const T = {
   text:'#fff4e8', muted:'#7a6a58', dim:'#3a3028', o2:'#ffaa33',
 };
 
-// ── App state ──
+// ── State ──
 let caps         = [];
 let currentUser  = null;
 let unsubCaps    = null;
@@ -38,11 +40,10 @@ let searchQ      = '';
 let pendingPhoto = null;
 let cropSrc = null, cropScale = 1, cropX = 0, cropY = 0;
 let cropDragging = false, cropLastX = 0, cropLastY = 0, cropPinchDist = 0;
+let aiLoading    = false;
 
-// ── Firestore helpers ──
-function capsCol() {
-  return collection(db, 'users', currentUser.uid, 'caps');
-}
+// ── Firestore ──
+function capsCol() { return collection(db, 'users', currentUser.uid, 'caps'); }
 
 function subscribeCaps() {
   if (unsubCaps) unsubCaps();
@@ -53,43 +54,55 @@ function subscribeCaps() {
   });
 }
 
-async function dbAdd(data) {
-  await addDoc(capsCol(), { ...data, createdAt: Date.now() });
-}
-
-async function dbUpdate(id, data) {
-  await updateDoc(doc(db, 'users', currentUser.uid, 'caps', id), data);
-}
-
-async function dbDelete(id) {
-  await deleteDoc(doc(db, 'users', currentUser.uid, 'caps', id));
-}
+async function dbAdd(data)       { await addDoc(capsCol(), { ...data, createdAt: Date.now() }); }
+async function dbUpdate(id, data){ await updateDoc(doc(db, 'users', currentUser.uid, 'caps', id), data); }
+async function dbDelete(id)      { await deleteDoc(doc(db, 'users', currentUser.uid, 'caps', id)); }
 
 // ── Auth ──
 async function loginGoogle() {
-  try {
-    await signInWithPopup(auth, new GoogleAuthProvider());
-  } catch(e) {
-    showToast('Erro ao entrar. Tente novamente.', 'err');
-  }
+  try { await signInWithPopup(auth, new GoogleAuthProvider()); }
+  catch(e) { showToast('Erro ao entrar. Tente novamente.', 'err'); }
 }
-
 async function logout() {
   if (unsubCaps) { unsubCaps(); unsubCaps = null; }
   caps = [];
   await signOut(auth);
 }
 
+// ── Gemini AI ──
+async function analyzePhotoWithAI(base64, mimeType) {
+  const prompt = `Analise esta imagem de tampinha de garrafa e retorne APENAS um JSON válido sem markdown:
+{"name":"nome identificador (marca+característica, ex: Brahma Vermelha 350ml)","brand":"fabricante/marca","color":"cor predominante em texto (ex: Vermelha, Dourada, Azul)","country":"país de origem","notes":"descrição breve do design e bebida"}
+Se não identificar algum campo deixe string vazia. Retorne SOMENTE o JSON.`;
+
+  const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${GEMINI_KEY}`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      contents: [{
+        parts: [
+          { inline_data: { mime_type: mimeType, data: base64 } },
+          { text: prompt }
+        ]
+      }]
+    })
+  });
+
+  const data = await res.json();
+  const text = data.candidates?.[0]?.content?.parts?.[0]?.text || '';
+  return JSON.parse(text.replace(/```json|```/g, '').trim());
+}
+
 // ── Toast ──
 function showToast(msg, type='ok') {
   const el = document.getElementById('toast-el');
   if (!el) return;
-  const c = { ok:['#052010','#22c55e'], err:['#4a0a0a','#ef4444'], info:['#0a1e2a','#4cc9f0'] }[type];
+  const c = { ok:['#052010','#22c55e'], err:['#4a0a0a','#ef4444'], info:['#0a1e2a','#4cc9f0'], ai:['#1a0a2a','#c084fc'] }[type];
   el.innerHTML = `<div style="position:fixed;top:16px;left:50%;transform:translateX(-50%);z-index:9999;padding:10px 22px;border-radius:24px;font-size:13px;font-weight:600;white-space:nowrap;background:${c[0]};color:${c[1]};border:1px solid ${c[1]};box-shadow:0 4px 20px rgba(0,0,0,.6)">${msg}</div>`;
-  setTimeout(() => { if(el) el.innerHTML=''; }, 2600);
+  setTimeout(() => { if(el) el.innerHTML=''; }, 3000);
 }
 
-// ── Navigation (show/hide screens) ──
+// ── Navigation ──
 let activeScreen = '';
 function goTo(screen) {
   activeScreen = screen;
@@ -99,7 +112,6 @@ function goTo(screen) {
   document.querySelectorAll('.nav-btn').forEach(b => {
     b.style.color = b.dataset.scr === screen ? O : T.muted;
   });
-  // show/hide nav bar
   const nav = document.getElementById('bottom-nav');
   if (nav) nav.style.display = (screen === 'login' || screen === 'crop') ? 'none' : 'flex';
   window.scrollTo(0, 0);
@@ -152,7 +164,7 @@ function buildApp() {
     <div id="list-items"></div>
   </div>
 
-  <!-- ADD/EDIT — never re-rendered, keyboard stays open -->
+  <!-- ADD/EDIT -->
   <div id="scr-add" class="screen" style="display:none;padding-bottom:100px">
     <div style="padding:52px 16px 14px;display:flex;align-items:center;gap:12px">
       <button onclick="cancelAdd()" style="${btnIconStyle()}">←</button>
@@ -167,7 +179,7 @@ function buildApp() {
 
     <div style="padding:0 16px;display:flex;flex-direction:column;gap:16px">
 
-      <!-- Photo -->
+      <!-- Photo + AI -->
       <div>
         <div style="${lblStyle()}">Foto da tampola</div>
         <div style="display:flex;align-items:center;gap:14px;margin-bottom:10px">
@@ -179,12 +191,25 @@ function buildApp() {
             <button onclick="document.getElementById('inp-gal').click()" style="width:100%;padding:11px;border-radius:12px;border:1px solid ${T.border};background:${T.card2};color:${T.muted};font-weight:700;font-size:14px;cursor:pointer;font-family:inherit">🖼️ Galeria</button>
           </div>
         </div>
-        <button id="btn-crop" onclick="openCrop()" style="display:none;width:100%;padding:10px;border-radius:12px;border:1px solid ${T.border};background:${T.card2};color:${T.muted};font-weight:700;font-size:13px;cursor:pointer;font-family:inherit">✂️ Ajustar zoom e posição</button>
+        <div id="ai-btn-wrap" style="display:none;flex-direction:column;gap:8px">
+          <button id="btn-ai" onclick="runAI()" style="width:100%;padding:12px;border-radius:12px;border:1px solid #7c3aed55;background:#7c3aed15;color:#c084fc;font-weight:700;font-size:14px;cursor:pointer;font-family:inherit">✨ Identificar com IA</button>
+          <button id="btn-crop" onclick="openCrop()" style="width:100%;padding:10px;border-radius:12px;border:1px solid ${T.border};background:${T.card2};color:${T.muted};font-weight:700;font-size:13px;cursor:pointer;font-family:inherit">✂️ Ajustar zoom e posição</button>
+        </div>
         <input id="inp-cam" type="file" accept="image/*" capture="environment" style="display:none" onchange="loadPhoto(this.files[0])"/>
         <input id="inp-gal" type="file" accept="image/*" style="display:none" onchange="loadPhoto(this.files[0])"/>
       </div>
 
-      <!-- Text fields — pure DOM, never re-rendered -->
+      <!-- AI result card -->
+      <div id="ai-result" style="display:none;background:#1a0a2a;border:1.5px solid #7c3aed55;border-radius:14px;padding:14px">
+        <div style="font-size:11px;font-weight:700;color:#c084fc;letter-spacing:1.5px;margin-bottom:10px">✨ IDENTIFICADO PELA IA</div>
+        <div id="ai-result-content"></div>
+        <div style="display:flex;gap:8px;margin-top:12px">
+          <button onclick="dismissAI()" style="flex:1;padding:10px;border-radius:10px;border:1px solid ${T.border};background:transparent;color:${T.muted};font-weight:700;font-size:13px;cursor:pointer;font-family:inherit">Ignorar</button>
+          <button onclick="applyAI()" style="flex:2;padding:10px;border-radius:10px;border:none;background:linear-gradient(135deg,#7c3aed,#4f46e5);color:#fff;font-weight:800;font-size:13px;cursor:pointer;font-family:inherit">✅ Usar estes dados</button>
+        </div>
+      </div>
+
+      <!-- Text fields -->
       <div><div style="${lblStyle()}">Nome *</div><input id="f-name" placeholder="Ex: Brahma Especial" style="${inpStyle()}" oninput="checkDuplicate()"/></div>
       <div><div style="${lblStyle()}">Marca</div><input id="f-brand" placeholder="Ex: Brahma" style="${inpStyle()}"/></div>
       <div><div style="${lblStyle()}">Cor</div><input id="f-color" placeholder="Ex: Vermelha, Dourada, Azul..." style="${inpStyle()}"/></div>
@@ -249,6 +274,60 @@ function buildApp() {
   `;
 }
 
+// ── AI functions ──
+let aiData = null;
+let pendingPhotoBase64 = null;
+let pendingPhotoMime   = null;
+
+async function runAI() {
+  if (!pendingPhotoBase64 || aiLoading) return;
+  aiLoading = true;
+  const btn = document.getElementById('btn-ai');
+  if (btn) { btn.textContent = '⟳ Analisando...'; btn.disabled = true; }
+  try {
+    const result = await analyzePhotoWithAI(pendingPhotoBase64, pendingPhotoMime);
+    aiData = result;
+    showAIResult(result);
+    showToast('✨ IA identificou a tampola!', 'ai');
+  } catch(e) {
+    showToast('Não consegui identificar. Tente outra foto.', 'err');
+  } finally {
+    aiLoading = false;
+    if (btn) { btn.textContent = '✨ Identificar com IA'; btn.disabled = false; }
+  }
+}
+
+function showAIResult(r) {
+  const el = document.getElementById('ai-result');
+  const content = document.getElementById('ai-result-content');
+  if (!el || !content) return;
+  const fields = [['Nome',r.name],['Marca',r.brand],['Cor',r.color],['País',r.country]].filter(([,v])=>v);
+  content.innerHTML = fields.map(([l,v])=>`
+    <div style="display:flex;justify-content:space-between;padding:4px 0;border-bottom:1px solid #2a1a3a">
+      <span style="font-size:12px;color:${T.muted}">${l}</span>
+      <span style="font-size:13px;font-weight:700">${v}</span>
+    </div>`).join('') + (r.notes ? `<div style="font-size:12px;color:${T.muted};margin-top:8px;font-style:italic">${r.notes}</div>` : '');
+  el.style.display = 'block';
+}
+
+function applyAI() {
+  if (!aiData) return;
+  if (aiData.name)    { const el=document.getElementById('f-name');    if(el) el.value=aiData.name; }
+  if (aiData.brand)   { const el=document.getElementById('f-brand');   if(el) el.value=aiData.brand; }
+  if (aiData.color)   { const el=document.getElementById('f-color');   if(el) el.value=aiData.color; }
+  if (aiData.country) { const el=document.getElementById('f-country'); if(el) el.value=aiData.country; }
+  if (aiData.notes)   { const el=document.getElementById('f-notes');   if(el) el.value=aiData.notes; }
+  dismissAI();
+  checkDuplicate();
+  showToast('Dados preenchidos!', 'ok');
+}
+
+function dismissAI() {
+  const el = document.getElementById('ai-result');
+  if (el) el.style.display = 'none';
+  aiData = null;
+}
+
 // ── Duplicate check ──
 function checkDuplicate() {
   const nameEl  = document.getElementById('f-name');
@@ -264,7 +343,7 @@ function checkDuplicate() {
 
 // ── Add / Edit ──
 function openAdd() {
-  editingId=null; pendingPhoto=null;
+  editingId=null; pendingPhoto=null; pendingPhotoBase64=null; pendingPhotoMime=null; aiData=null;
   document.getElementById('add-title').textContent='Nova Tampola';
   document.getElementById('btn-save').textContent='SALVAR TAMPOLA';
   ['f-name','f-brand','f-color','f-country','f-notes'].forEach(id=>{
@@ -272,12 +351,13 @@ function openAdd() {
   });
   const q=document.getElementById('f-quantity'); if(q) q.value=1;
   document.getElementById('dup-alert').style.display='none';
+  const aiRes=document.getElementById('ai-result'); if(aiRes) aiRes.style.display='none';
   updatePhotoThumb();
   goTo('add');
 }
 
 function openEdit(cap) {
-  editingId=cap.id; pendingPhoto=cap.photo||null;
+  editingId=cap.id; pendingPhoto=cap.photo||null; pendingPhotoBase64=null; pendingPhotoMime=null; aiData=null;
   document.getElementById('add-title').textContent='Editar Tampola';
   document.getElementById('btn-save').textContent='SALVAR ALTERAÇÕES';
   document.getElementById('f-name').value    = cap.name    ||'';
@@ -287,6 +367,7 @@ function openEdit(cap) {
   document.getElementById('f-quantity').value= cap.quantity||1;
   document.getElementById('f-notes').value   = cap.notes   ||'';
   document.getElementById('dup-alert').style.display='none';
+  const aiRes=document.getElementById('ai-result'); if(aiRes) aiRes.style.display='none';
   updatePhotoThumb();
   goTo('add');
 }
@@ -317,37 +398,36 @@ async function saveCap() {
     if (editingId) {
       await dbUpdate(editingId, form);
       showToast('Atualizada!');
-      currentCapId = editingId; editingId=null;
+      currentCapId=editingId; editingId=null;
       goTo('detail');
     } else {
       await dbAdd(form);
       showToast('Tampola adicionada!');
-      editingId=null;
-      goTo('list');
+      editingId=null; goTo('list');
     }
   } catch(e) {
-    showToast('Erro ao salvar. Tente novamente.','err');
-  } finally {
+    showToast('Erro ao salvar.','err');
     if (btn) { btn.disabled=false; btn.textContent=editingId?'SALVAR ALTERAÇÕES':'SALVAR TAMPOLA'; }
   }
 }
 
 async function deleteCap(id) {
   if (!confirm('Remover esta tampola?')) return;
-  try {
-    await dbDelete(id);
-    showToast('Removida.','info');
-    goTo('list');
-  } catch(e) { showToast('Erro ao remover.','err'); }
+  try { await dbDelete(id); showToast('Removida.','info'); goTo('list'); }
+  catch(e) { showToast('Erro ao remover.','err'); }
 }
 
 // ── Photo / Crop ──
 function loadPhoto(file) {
   if (!file) return;
+  const mime = file.type || 'image/jpeg';
   const r = new FileReader();
   r.onload = e => {
-    cropSrc=e.target.result; cropScale=1; cropX=0; cropY=0;
-    openCropScreen(cropSrc);
+    const dataUrl = e.target.result;
+    pendingPhotoBase64 = dataUrl.split(',')[1];
+    pendingPhotoMime   = mime;
+    cropSrc=dataUrl; cropScale=1; cropX=0; cropY=0;
+    openCropScreen(dataUrl);
   };
   r.readAsDataURL(file);
 }
@@ -355,7 +435,7 @@ function loadPhoto(file) {
 function openCrop() {
   if (!pendingPhoto) return;
   cropSrc=pendingPhoto; cropScale=1; cropX=0; cropY=0;
-  openCropScreen(cropSrc);
+  openCropScreen(pendingPhoto);
 }
 
 function openCropScreen(src) {
@@ -384,23 +464,26 @@ function confirmCrop() {
   const scale=Math.max(SIZE/iw,SIZE/ih)*cropScale;
   ctx.drawImage(img,(SIZE-iw*scale)/2+cropX,(SIZE-ih*scale)/2+cropY,iw*scale,ih*scale);
   pendingPhoto=out.toDataURL('image/jpeg',0.82);
+  // update base64 for AI with cropped version
+  pendingPhotoBase64=pendingPhoto.split(',')[1];
+  pendingPhotoMime='image/jpeg';
   updatePhotoThumb();
   goTo('add');
 }
 
 function updatePhotoThumb() {
   const thumb=document.getElementById('photo-thumb');
-  const btnCrop=document.getElementById('btn-crop');
+  const aiBtnWrap=document.getElementById('ai-btn-wrap');
   if (!thumb) return;
   if (pendingPhoto) {
     thumb.innerHTML=`<div style="position:relative;width:90px;height:90px;flex-shrink:0">
       <img src="${pendingPhoto}" style="width:90px;height:90px;border-radius:50%;object-fit:cover;border:2px solid ${O}"/>
-      <button onclick="pendingPhoto=null;updatePhotoThumb()" style="position:absolute;top:-4px;right:-4px;background:#200505;border:1px solid #ef4444;color:#ef4444;border-radius:50%;width:24px;height:24px;cursor:pointer;font-size:12px;display:flex;align-items:center;justify-content:center;font-family:inherit">✕</button>
+      <button onclick="pendingPhoto=null;pendingPhotoBase64=null;updatePhotoThumb()" style="position:absolute;top:-4px;right:-4px;background:#200505;border:1px solid #ef4444;color:#ef4444;border-radius:50%;width:24px;height:24px;cursor:pointer;font-size:12px;display:flex;align-items:center;justify-content:center;font-family:inherit">✕</button>
     </div>`;
-    if (btnCrop) btnCrop.style.display='block';
+    if (aiBtnWrap) aiBtnWrap.style.display='flex';
   } else {
     thumb.innerHTML=`<div style="width:90px;height:90px;border-radius:50%;background:${T.card2};border:2px dashed ${T.border};display:flex;align-items:center;justify-content:center;font-size:32px;flex-shrink:0">🍺</div>`;
-    if (btnCrop) btnCrop.style.display='none';
+    if (aiBtnWrap) aiBtnWrap.style.display='none';
   }
 }
 
@@ -577,36 +660,18 @@ document.getElementById('app').innerHTML=`
   </div>`;
 
 onAuthStateChanged(auth, user => {
-  currentUser = user;
+  currentUser=user;
   buildApp();
-  if (user) {
-    subscribeCaps();
-    renderHome();
-    goTo('home');
-  } else {
-    if (unsubCaps) { unsubCaps(); unsubCaps=null; }
-    caps=[];
-    goTo('login');
-  }
+  if (user) { subscribeCaps(); renderHome(); goTo('home'); }
+  else { if(unsubCaps){unsubCaps();unsubCaps=null;} caps=[]; goTo('login'); }
 });
 
-// expose functions to global scope for inline handlers
-window.loginGoogle   = loginGoogle;
-window.logout        = logout;
-window.goTo          = goTo;
-window.openAdd       = openAdd;
-window.openEdit      = openEdit;
-window.openDetail    = openDetail;
-window.cancelAdd     = cancelAdd;
-window.saveCap       = saveCap;
-window.deleteCap     = deleteCap;
-window.checkDuplicate= checkDuplicate;
-window.loadPhoto     = loadPhoto;
-window.openCrop      = openCrop;
-window.confirmCrop   = confirmCrop;
-window.drawCrop      = drawCrop;
-window.cropDown      = cropDown;
-window.cropMove      = cropMove;
-window.cropUp        = cropUp;
-window.updatePhotoThumb = updatePhotoThumb;
-window.renderList    = renderList;
+// expose to global
+window.loginGoogle=loginGoogle; window.logout=logout; window.goTo=goTo;
+window.openAdd=openAdd; window.openEdit=openEdit; window.openDetail=openDetail;
+window.cancelAdd=cancelAdd; window.saveCap=saveCap; window.deleteCap=deleteCap;
+window.checkDuplicate=checkDuplicate; window.loadPhoto=loadPhoto;
+window.openCrop=openCrop; window.confirmCrop=confirmCrop; window.drawCrop=drawCrop;
+window.cropDown=cropDown; window.cropMove=cropMove; window.cropUp=cropUp;
+window.updatePhotoThumb=updatePhotoThumb; window.renderList=renderList;
+window.runAI=runAI; window.applyAI=applyAI; window.dismissAI=dismissAI;
