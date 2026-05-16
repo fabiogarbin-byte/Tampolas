@@ -1,12 +1,7 @@
 // ── Firebase ──
 import { initializeApp } from 'https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js';
-import {
-  getAuth, GoogleAuthProvider, signInWithPopup, signOut, onAuthStateChanged
-} from 'https://www.gstatic.com/firebasejs/10.12.0/firebase-auth.js';
-import {
-  getFirestore, collection, doc, addDoc, updateDoc, deleteDoc,
-  onSnapshot, query, orderBy
-} from 'https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js';
+import { getAuth, GoogleAuthProvider, signInWithPopup, signOut, onAuthStateChanged } from 'https://www.gstatic.com/firebasejs/10.12.0/firebase-auth.js';
+import { getFirestore, collection, doc, addDoc, updateDoc, deleteDoc, onSnapshot, query, orderBy } from 'https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js';
 
 const firebaseConfig = {
   apiKey: "AIzaSyCY3JxXACKRdj1b4JyLMK2hI2Rn1upR6Hk",
@@ -16,54 +11,42 @@ const firebaseConfig = {
   messagingSenderId: "594488372191",
   appId: "1:594488372191:web:83f46233b8c4fffe23f26a"
 };
-
 const GEMINI_KEY = "AIzaSyCGXmgMtEr9vmg35-MZf_ms-Nqp8K5qbyM";
 
 const firebaseApp = initializeApp(firebaseConfig);
 const auth = getAuth(firebaseApp);
 const db   = getFirestore(firebaseApp);
 
-// ── Theme ──
 const O = '#ff8c00';
-const T = {
-  bg:'#141210', card:'#1e1a16', card2:'#252018', border:'#2e2618',
-  text:'#fff4e8', muted:'#7a6a58', dim:'#3a3028', o2:'#ffaa33',
-};
+const T = { bg:'#141210', card:'#1e1a16', card2:'#252018', border:'#2e2618', text:'#fff4e8', muted:'#7a6a58', dim:'#3a3028', o2:'#ffaa33' };
 
 // ── State ──
-let caps         = [];
-let currentUser  = null;
-let unsubCaps    = null;
-let currentCapId = null;
-let editingId    = null;
-let searchQ      = '';
-let pendingPhoto = null;
-let cropSrc = null, cropScale = 1, cropX = 0, cropY = 0;
+let caps = [], currentUser = null, unsubCaps = null;
+let currentCapId = null, editingId = null, searchQ = '';
+let pendingPhoto = null, pendingPhotoBase64 = null, pendingPhotoMime = null;
+let originalPhotoBase64 = null, originalPhotoMime = null;
+let aiData = null, aiLoading = false;
+let cropSrc = null, cropScale = 1, cropX = 0, cropY = 0, cropRotate = 0;
 let cropDragging = false, cropLastX = 0, cropLastY = 0, cropPinchDist = 0;
-let aiLoading    = false;
-let originalPhotoBase64 = null;
-let originalPhotoMime   = null;
 
 // ── Firestore ──
-function capsCol() { return collection(db, 'users', currentUser.uid, 'caps'); }
+const capsCol  = ()       => collection(db, 'users', currentUser.uid, 'caps');
+const dbAdd    = data     => addDoc(capsCol(), { ...data, createdAt: Date.now() });
+const dbUpdate = (id, d)  => updateDoc(doc(db, 'users', currentUser.uid, 'caps', id), d);
+const dbDelete = id       => deleteDoc(doc(db, 'users', currentUser.uid, 'caps', id));
 
 function subscribeCaps() {
   if (unsubCaps) unsubCaps();
-  const q = query(capsCol(), orderBy('createdAt', 'desc'));
-  unsubCaps = onSnapshot(q, snap => {
+  unsubCaps = onSnapshot(query(capsCol(), orderBy('createdAt','desc')), snap => {
     caps = snap.docs.map(d => ({ id: d.id, ...d.data() }));
     refreshCurrentScreen();
   });
 }
 
-async function dbAdd(data)       { await addDoc(capsCol(), { ...data, createdAt: Date.now() }); }
-async function dbUpdate(id, data){ await updateDoc(doc(db, 'users', currentUser.uid, 'caps', id), data); }
-async function dbDelete(id)      { await deleteDoc(doc(db, 'users', currentUser.uid, 'caps', id)); }
-
 // ── Auth ──
 async function loginGoogle() {
   try { await signInWithPopup(auth, new GoogleAuthProvider()); }
-  catch(e) { showToast('Erro ao entrar. Tente novamente.', 'err'); }
+  catch(e) { showToast('Erro ao entrar. Tente novamente.','err'); }
 }
 async function logout() {
   if (unsubCaps) { unsubCaps(); unsubCaps = null; }
@@ -71,7 +54,7 @@ async function logout() {
   await signOut(auth);
 }
 
-// ── Gemini AI ──
+// ── Gemini ──
 async function analyzePhotoWithAI(base64, mimeType) {
   const prompt = `Analise esta imagem de tampinha de garrafa e retorne APENAS um JSON válido sem markdown:
 {"name":"nome identificador (marca+característica, ex: Brahma Vermelha 350ml)","brand":"fabricante/marca","color":"cor predominante em texto (ex: Vermelha, Dourada, Azul)","country":"país de origem","notes":"descrição breve do design e bebida"}
@@ -80,28 +63,30 @@ Se não identificar algum campo deixe string vazia. Retorne SOMENTE o JSON.`;
   const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${GEMINI_KEY}`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({
-      contents: [{
-        parts: [
-          { inline_data: { mime_type: mimeType, data: base64 } },
-          { text: prompt }
-        ]
-      }]
-    })
+    body: JSON.stringify({ contents: [{ parts: [{ inline_data: { mime_type: mimeType, data: base64 } }, { text: prompt }] }] })
   });
 
+  if (!res.ok) {
+    const e = await res.json().catch(() => ({}));
+    throw new Error(e?.error?.message || `HTTP ${res.status}`);
+  }
   const data = await res.json();
+  if (data.error) throw new Error(data.error.message);
+  if (data.promptFeedback?.blockReason) throw new Error('Imagem bloqueada: ' + data.promptFeedback.blockReason);
   const text = data.candidates?.[0]?.content?.parts?.[0]?.text || '';
-  return JSON.parse(text.replace(/```json|```/g, '').trim());
+  if (!text) throw new Error('Resposta vazia da IA');
+  const clean = text.replace(/```json|```/g, '').trim();
+  try { return JSON.parse(clean); }
+  catch { const m = clean.match(/\{[\s\S]*\}/); if (m) return JSON.parse(m[0]); throw new Error('Formato inválido: ' + clean.slice(0,60)); }
 }
 
 // ── Toast ──
 function showToast(msg, type='ok') {
   const el = document.getElementById('toast-el');
   if (!el) return;
-  const c = { ok:['#052010','#22c55e'], err:['#4a0a0a','#ef4444'], info:['#0a1e2a','#4cc9f0'], ai:['#1a0a2a','#c084fc'] }[type];
+  const c = { ok:['#052010','#22c55e'], err:['#4a0a0a','#ef4444'], info:['#0a1e2a','#4cc9f0'], ai:['#1a0a2a','#c084fc'] }[type] || ['#111','#fff'];
   el.innerHTML = `<div style="position:fixed;top:16px;left:50%;transform:translateX(-50%);z-index:9999;padding:10px 22px;border-radius:24px;font-size:13px;font-weight:600;white-space:nowrap;background:${c[0]};color:${c[1]};border:1px solid ${c[1]};box-shadow:0 4px 20px rgba(0,0,0,.6)">${msg}</div>`;
-  setTimeout(() => { if(el) el.innerHTML=''; }, 3000);
+  setTimeout(() => { if (el) el.innerHTML = ''; }, 3200);
 }
 
 // ── Navigation ──
@@ -111,9 +96,7 @@ function goTo(screen) {
   document.querySelectorAll('.screen').forEach(s => s.style.display = 'none');
   const el = document.getElementById('scr-' + screen);
   if (el) el.style.display = 'block';
-  document.querySelectorAll('.nav-btn').forEach(b => {
-    b.style.color = b.dataset.scr === screen ? O : T.muted;
-  });
+  document.querySelectorAll('.nav-btn').forEach(b => { b.style.color = b.dataset.scr === screen ? O : T.muted; });
   const nav = document.getElementById('bottom-nav');
   if (nav) nav.style.display = (screen === 'login' || screen === 'crop') ? 'none' : 'flex';
   window.scrollTo(0, 0);
@@ -125,12 +108,11 @@ function refreshCurrentScreen() {
   if (activeScreen === 'detail' && currentCapId) renderDetail(currentCapId);
 }
 
-// ── Style helpers ──
 const btnIconStyle = () => `background:${T.card};border:1px solid ${T.border};color:${T.text};border-radius:10px;width:38px;height:38px;cursor:pointer;font-size:18px;display:flex;align-items:center;justify-content:center;flex-shrink:0;font-family:inherit`;
 const lblStyle     = () => `font-size:11px;font-weight:700;color:${T.muted};letter-spacing:1px;text-transform:uppercase;display:block;margin-bottom:8px`;
 const inpStyle     = () => `width:100%;background:#1a1510;border:1.5px solid ${T.border};color:${T.text};border-radius:12px;padding:12px 14px;font-size:15px;outline:none;font-family:inherit;box-sizing:border-box`;
 
-// ── Build all screens once ──
+// ── Build screens ──
 function buildApp() {
   document.getElementById('app').innerHTML = `
 
@@ -152,16 +134,12 @@ function buildApp() {
   <div id="scr-list" class="screen" style="display:none;padding-bottom:90px">
     <div style="padding:52px 16px 14px;display:flex;align-items:center;gap:12px">
       <button onclick="goTo('home')" style="${btnIconStyle()}">←</button>
-      <div style="flex:1">
-        <div style="font-weight:800;font-size:18px">Coleção</div>
-        <div id="list-count" style="font-size:11px;color:${T.muted};margin-top:1px"></div>
-      </div>
+      <div style="flex:1"><div style="font-weight:800;font-size:18px">Coleção</div><div id="list-count" style="font-size:11px;color:${T.muted};margin-top:1px"></div></div>
     </div>
     <div style="padding:0 16px 12px;position:relative">
       <span style="position:absolute;left:28px;top:50%;transform:translateY(-50%);color:${T.muted};font-size:16px;pointer-events:none">🔍</span>
-      <input id="search-box" placeholder="Buscar nome, marca, cor ou país..."
-        style="width:100%;background:${T.card2};border:1.5px solid ${T.border};color:${T.text};border-radius:12px;padding:11px 14px 11px 40px;font-size:15px;outline:none;font-family:inherit;box-sizing:border-box"
-        oninput="searchQ=this.value;renderList()"/>
+      <input id="search-box" placeholder="Buscar nome, marca, cor ou país..." oninput="searchQ=this.value;renderList()"
+        style="width:100%;background:${T.card2};border:1.5px solid ${T.border};color:${T.text};border-radius:12px;padding:11px 14px 11px 40px;font-size:15px;outline:none;font-family:inherit;box-sizing:border-box"/>
     </div>
     <div id="list-items"></div>
   </div>
@@ -172,16 +150,11 @@ function buildApp() {
       <button onclick="cancelAdd()" style="${btnIconStyle()}">←</button>
       <div id="add-title" style="font-weight:800;font-size:18px">Nova Tampola</div>
     </div>
-
-    <!-- Duplicate warning -->
     <div id="dup-alert" style="display:none;margin:0 16px 12px;padding:12px 16px;border-radius:12px;background:#2a1500;border:1.5px solid ${O};color:${T.o2};font-size:13px;font-weight:600;line-height:1.5">
-      ⚠️ Você já tem uma tampola parecida:<br/>
-      <span id="dup-name" style="font-weight:800;color:${T.text}"></span>
+      ⚠️ Você já tem uma tampola parecida:<br/><span id="dup-name" style="font-weight:800;color:${T.text}"></span>
     </div>
-
     <div style="padding:0 16px;display:flex;flex-direction:column;gap:16px">
 
-      <!-- Photo + AI -->
       <div>
         <div style="${lblStyle()}">Foto da tampola</div>
         <div style="display:flex;align-items:center;gap:14px;margin-bottom:10px">
@@ -195,13 +168,12 @@ function buildApp() {
         </div>
         <div id="ai-btn-wrap" style="display:none;flex-direction:column;gap:8px">
           <button id="btn-ai" onclick="runAI()" style="width:100%;padding:12px;border-radius:12px;border:1px solid #7c3aed55;background:#7c3aed15;color:#c084fc;font-weight:700;font-size:14px;cursor:pointer;font-family:inherit">✨ Identificar com IA</button>
-          <button id="btn-crop" onclick="openCrop()" style="width:100%;padding:10px;border-radius:12px;border:1px solid ${T.border};background:${T.card2};color:${T.muted};font-weight:700;font-size:13px;cursor:pointer;font-family:inherit">✂️ Ajustar zoom e posição</button>
+          <button id="btn-crop" onclick="openCrop()" style="width:100%;padding:10px;border-radius:12px;border:1px solid ${T.border};background:${T.card2};color:${T.muted};font-weight:700;font-size:13px;cursor:pointer;font-family:inherit">✂️ Ajustar zoom, posição e rotação</button>
         </div>
         <input id="inp-cam" type="file" accept="image/*" capture="environment" style="display:none" onchange="loadPhoto(this.files[0])"/>
         <input id="inp-gal" type="file" accept="image/*" style="display:none" onchange="loadPhoto(this.files[0])"/>
       </div>
 
-      <!-- AI result card -->
       <div id="ai-result" style="display:none;background:#1a0a2a;border:1.5px solid #7c3aed55;border-radius:14px;padding:14px">
         <div style="font-size:11px;font-weight:700;color:#c084fc;letter-spacing:1.5px;margin-bottom:10px">✨ IDENTIFICADO PELA IA</div>
         <div id="ai-result-content"></div>
@@ -211,7 +183,6 @@ function buildApp() {
         </div>
       </div>
 
-      <!-- Text fields -->
       <div><div style="${lblStyle()}">Nome *</div><input id="f-name" placeholder="Ex: Brahma Especial" style="${inpStyle()}" oninput="checkDuplicate()"/></div>
       <div><div style="${lblStyle()}">Marca</div><input id="f-brand" placeholder="Ex: Brahma" style="${inpStyle()}"/></div>
       <div><div style="${lblStyle()}">Cor</div><input id="f-color" placeholder="Ex: Vermelha, Dourada, Azul..." style="${inpStyle()}"/></div>
@@ -219,43 +190,60 @@ function buildApp() {
       <div><div style="${lblStyle()}">Quantidade</div><input id="f-quantity" type="number" min="1" value="1" style="${inpStyle()}"/></div>
       <div><div style="${lblStyle()}">Notas</div><textarea id="f-notes" placeholder="Raridade, origem, detalhes..." rows="3" style="${inpStyle()};resize:vertical;line-height:1.5"></textarea></div>
 
-      <button id="btn-save" onclick="saveCap()" style="width:100%;padding:16px;border-radius:14px;border:none;background:linear-gradient(135deg,${O},#c05500);color:#fff;font-weight:800;font-size:16px;cursor:pointer;font-family:inherit;box-shadow:0 6px 20px ${O}40;margin-bottom:8px">
-        SALVAR TAMPOLA
-      </button>
+      <button id="btn-save" onclick="saveCap()" style="width:100%;padding:16px;border-radius:14px;border:none;background:linear-gradient(135deg,${O},#c05500);color:#fff;font-weight:800;font-size:16px;cursor:pointer;font-family:inherit;box-shadow:0 6px 20px ${O}40;margin-bottom:8px">SALVAR TAMPOLA</button>
     </div>
   </div>
 
   <!-- DETAIL -->
   <div id="scr-detail" class="screen" style="display:none;padding-bottom:100px"></div>
 
-  <!-- CROP -->
-  <div id="scr-crop" class="screen" style="display:none;padding-bottom:90px">
+  <!-- CROP com rotação -->
+  <div id="scr-crop" class="screen" style="display:none;padding-bottom:40px">
     <div style="padding:52px 16px 14px;display:flex;align-items:center;gap:12px">
       <button onclick="goTo('add')" style="${btnIconStyle()}">←</button>
       <div style="font-weight:800;font-size:18px">Ajustar Foto</div>
     </div>
-    <div style="font-size:13px;color:${T.muted};margin-bottom:16px;text-align:center;padding:0 16px">
-      Arraste para reposicionar · Belisque para zoom
+    <div style="font-size:12px;color:${T.muted};margin-bottom:14px;text-align:center;padding:0 16px">
+      Arraste para mover · Belisque para zoom · Use o controle para girar
     </div>
     <div style="display:flex;justify-content:center">
       <div id="crop-wrap" style="border-radius:50%;overflow:hidden;border:3px solid ${O}"></div>
     </div>
     <img id="crop-img" style="display:none" onload="drawCrop()"/>
-    <div style="width:100%;padding:20px 16px 0">
-      <div style="${lblStyle()}">Zoom</div>
-      <input id="zoom-slider" type="range" min="1" max="4" step="0.05" value="1"
-        oninput="cropScale=parseFloat(this.value);drawCrop()"
-        style="width:100%;accent-color:${O};margin-top:6px"/>
-    </div>
-    <div style="padding:20px 16px 0;display:flex;gap:10px">
-      <button onclick="goTo('add')" style="flex:1;padding:16px;border-radius:14px;border:1px solid ${T.border};background:${T.card};color:${T.muted};font-weight:700;font-size:15px;cursor:pointer;font-family:inherit">Cancelar</button>
-      <button onclick="confirmCrop()" style="flex:2;padding:16px;border-radius:14px;border:none;background:linear-gradient(135deg,${O},#c05500);color:#fff;font-weight:800;font-size:16px;cursor:pointer;font-family:inherit;box-shadow:0 4px 16px ${O}50">
-        ✓ Confirmar Foto
+
+    <div style="padding:16px 16px 0;display:flex;flex-direction:column;gap:12px">
+      <div>
+        <div style="${lblStyle()}">Zoom</div>
+        <input id="zoom-slider" type="range" min="1" max="4" step="0.05" value="1"
+          oninput="cropScale=parseFloat(this.value);drawCrop()"
+          style="width:100%;accent-color:${O}"/>
+      </div>
+      <div>
+        <div style="${lblStyle()}">Rotação</div>
+        <div style="display:flex;align-items:center;gap:10px">
+          <button onclick="cropRotate-=15;if(cropRotate<-180)cropRotate+=360;document.getElementById('rotate-slider').value=cropRotate;drawCrop()"
+            style="width:44px;height:44px;border-radius:10px;border:1px solid ${T.border};background:${T.card2};color:${T.text};font-size:20px;cursor:pointer;flex-shrink:0;font-family:inherit">↺</button>
+          <input id="rotate-slider" type="range" min="-180" max="180" step="1" value="0"
+            oninput="cropRotate=parseFloat(this.value);drawCrop()"
+            style="flex:1;accent-color:${O}"/>
+          <button onclick="cropRotate+=15;if(cropRotate>180)cropRotate-=360;document.getElementById('rotate-slider').value=cropRotate;drawCrop()"
+            style="width:44px;height:44px;border-radius:10px;border:1px solid ${T.border};background:${T.card2};color:${T.text};font-size:20px;cursor:pointer;flex-shrink:0;font-family:inherit">↻</button>
+        </div>
+        <div style="text-align:center;font-size:12px;color:${T.muted};margin-top:4px" id="rotate-label">0°</div>
+      </div>
+      <button onclick="cropRotate=0;cropScale=1;cropX=0;cropY=0;document.getElementById('zoom-slider').value=1;document.getElementById('rotate-slider').value=0;document.getElementById('rotate-label').textContent='0°';drawCrop()"
+        style="padding:10px;border-radius:10px;border:1px solid ${T.border};background:${T.card2};color:${T.muted};font-weight:700;font-size:13px;cursor:pointer;font-family:inherit">
+        ↺ Resetar
       </button>
+    </div>
+
+    <div style="padding:16px;display:flex;gap:10px">
+      <button onclick="goTo('add')" style="flex:1;padding:16px;border-radius:14px;border:1px solid ${T.border};background:${T.card};color:${T.muted};font-weight:700;font-size:15px;cursor:pointer;font-family:inherit">Cancelar</button>
+      <button onclick="confirmCrop()" style="flex:2;padding:16px;border-radius:14px;border:none;background:linear-gradient(135deg,${O},#c05500);color:#fff;font-weight:800;font-size:16px;cursor:pointer;font-family:inherit;box-shadow:0 4px 16px ${O}50">✓ Confirmar Foto</button>
     </div>
   </div>
 
-  <!-- BOTTOM NAV -->
+  <!-- NAV -->
   <div id="bottom-nav" style="position:fixed;bottom:0;left:50%;transform:translateX(-50%);width:100%;max-width:480px;background:rgba(14,12,10,.96);border-top:1px solid ${T.border};padding:10px 8px 22px;display:flex;align-items:center;z-index:100;backdrop-filter:blur(12px)">
     <button class="nav-btn" data-scr="home" onclick="goTo('home')" style="flex:1;background:none;border:none;cursor:pointer;display:flex;flex-direction:column;align-items:center;gap:3px;padding:4px 0;color:${T.muted}">
       <span style="font-size:28px">🏠</span><span style="font-size:11px;font-weight:700">Início</span>
@@ -271,96 +259,75 @@ function buildApp() {
     </button>
     <div style="flex:1"></div>
   </div>
-
-  <div id="toast-el"></div>
-  `;
+  <div id="toast-el"></div>`;
 }
 
-// ── AI functions ──
-let aiData = null;
-let pendingPhotoBase64 = null;
-let pendingPhotoMime   = null;
-
+// ── AI ──
 async function runAI() {
   if (!pendingPhotoBase64 || aiLoading) return;
   aiLoading = true;
   const btn = document.getElementById('btn-ai');
-  if (btn) { btn.textContent = '⟳ Analisando...'; btn.disabled = true; }
+  if (btn) { btn.textContent='⟳ Analisando...'; btn.disabled=true; }
   try {
-    // usa foto original (máxima qualidade) para melhor reconhecimento
-  const result = await analyzePhotoWithAI(originalPhotoBase64||pendingPhotoBase64, originalPhotoMime||pendingPhotoMime);
+    const result = await analyzePhotoWithAI(originalPhotoBase64||pendingPhotoBase64, originalPhotoMime||pendingPhotoMime);
     aiData = result;
     showAIResult(result);
-    showToast('✨ IA identificou a tampola!', 'ai');
+    showToast('✨ IA identificou a tampola!','ai');
   } catch(e) {
-    showToast('Não consegui identificar. Tente outra foto.', 'err');
+    console.error('AI error:', e);
+    showToast('Erro IA: ' + (e.message||'Tente novamente'),'err');
   } finally {
     aiLoading = false;
-    if (btn) { btn.textContent = '✨ Identificar com IA'; btn.disabled = false; }
+    if (btn) { btn.textContent='✨ Identificar com IA'; btn.disabled=false; }
   }
 }
 
 function showAIResult(r) {
-  const el = document.getElementById('ai-result');
-  const content = document.getElementById('ai-result-content');
-  if (!el || !content) return;
-  const fields = [['Nome',r.name],['Marca',r.brand],['Cor',r.color],['País',r.country]].filter(([,v])=>v);
-  content.innerHTML = fields.map(([l,v])=>`
-    <div style="display:flex;justify-content:space-between;padding:4px 0;border-bottom:1px solid #2a1a3a">
-      <span style="font-size:12px;color:${T.muted}">${l}</span>
-      <span style="font-size:13px;font-weight:700">${v}</span>
-    </div>`).join('') + (r.notes ? `<div style="font-size:12px;color:${T.muted};margin-top:8px;font-style:italic">${r.notes}</div>` : '');
-  el.style.display = 'block';
+  const el=document.getElementById('ai-result'), c=document.getElementById('ai-result-content');
+  if (!el||!c) return;
+  c.innerHTML=[['Nome',r.name],['Marca',r.brand],['Cor',r.color],['País',r.country]].filter(([,v])=>v)
+    .map(([l,v])=>`<div style="display:flex;justify-content:space-between;padding:4px 0;border-bottom:1px solid #2a1a3a"><span style="font-size:12px;color:${T.muted}">${l}</span><span style="font-size:13px;font-weight:700">${v}</span></div>`).join('')
+    + (r.notes?`<div style="font-size:12px;color:${T.muted};margin-top:8px;font-style:italic">${r.notes}</div>`:'');
+  el.style.display='block';
 }
 
 function applyAI() {
   if (!aiData) return;
-  if (aiData.name)    { const el=document.getElementById('f-name');    if(el) el.value=aiData.name; }
-  if (aiData.brand)   { const el=document.getElementById('f-brand');   if(el) el.value=aiData.brand; }
-  if (aiData.color)   { const el=document.getElementById('f-color');   if(el) el.value=aiData.color; }
-  if (aiData.country) { const el=document.getElementById('f-country'); if(el) el.value=aiData.country; }
-  if (aiData.notes)   { const el=document.getElementById('f-notes');   if(el) el.value=aiData.notes; }
-  dismissAI();
-  checkDuplicate();
-  showToast('Dados preenchidos!', 'ok');
+  [['f-name',aiData.name],['f-brand',aiData.brand],['f-color',aiData.color],['f-country',aiData.country],['f-notes',aiData.notes]].forEach(([id,v])=>{ if(v){ const el=document.getElementById(id); if(el) el.value=v; } });
+  dismissAI(); checkDuplicate(); showToast('Dados preenchidos!','ok');
 }
 
-function dismissAI() {
-  const el = document.getElementById('ai-result');
-  if (el) el.style.display = 'none';
-  aiData = null;
-}
+function dismissAI() { const el=document.getElementById('ai-result'); if(el) el.style.display='none'; aiData=null; }
 
 // ── Duplicate check ──
 function checkDuplicate() {
-  const nameEl  = document.getElementById('f-name');
-  const alertEl = document.getElementById('dup-alert');
-  const dupName = document.getElementById('dup-name');
-  if (!nameEl || !alertEl) return;
-  const q = nameEl.value.trim().toLowerCase();
-  if (q.length < 2) { alertEl.style.display='none'; return; }
-  const found = caps.find(c => c.id !== editingId && c.name.toLowerCase().includes(q));
-  if (found) { dupName.textContent=found.name; alertEl.style.display='block'; }
-  else alertEl.style.display='none';
+  const nameEl=document.getElementById('f-name'), alertEl=document.getElementById('dup-alert'), dupName=document.getElementById('dup-name');
+  if (!nameEl||!alertEl) return;
+  const q=nameEl.value.trim().toLowerCase();
+  if (q.length<2) { alertEl.style.display='none'; return; }
+  const found=caps.find(c=>c.id!==editingId&&c.name.toLowerCase().includes(q));
+  if (found) { dupName.textContent=found.name; alertEl.style.display='block'; } else alertEl.style.display='none';
 }
 
-// ── Add / Edit ──
-function openAdd() {
-  editingId=null; pendingPhoto=null; pendingPhotoBase64=null; pendingPhotoMime=null; originalPhotoBase64=null; originalPhotoMime=null; aiData=null;
-  document.getElementById('add-title').textContent='Nova Tampola';
-  document.getElementById('btn-save').textContent='SALVAR TAMPOLA';
-  ['f-name','f-brand','f-color','f-country','f-notes'].forEach(id=>{
-    const el=document.getElementById(id); if(el) el.value='';
-  });
+// ── Add/Edit ──
+function resetForm() {
+  ['f-name','f-brand','f-color','f-country','f-notes'].forEach(id=>{ const el=document.getElementById(id); if(el) el.value=''; });
   const q=document.getElementById('f-quantity'); if(q) q.value=1;
   document.getElementById('dup-alert').style.display='none';
   const aiRes=document.getElementById('ai-result'); if(aiRes) aiRes.style.display='none';
-  updatePhotoThumb();
-  goTo('add');
+}
+
+function openAdd() {
+  editingId=null; pendingPhoto=null; pendingPhotoBase64=null; pendingPhotoMime=null;
+  originalPhotoBase64=null; originalPhotoMime=null; aiData=null;
+  document.getElementById('add-title').textContent='Nova Tampola';
+  document.getElementById('btn-save').textContent='SALVAR TAMPOLA';
+  resetForm(); updatePhotoThumb(); goTo('add');
 }
 
 function openEdit(cap) {
-  editingId=cap.id; pendingPhoto=cap.photo||null; pendingPhotoBase64=null; pendingPhotoMime=null; originalPhotoBase64=null; originalPhotoMime=null; aiData=null;
+  editingId=cap.id; pendingPhoto=cap.photo||null; pendingPhotoBase64=null; pendingPhotoMime=null;
+  originalPhotoBase64=null; originalPhotoMime=null; aiData=null;
   document.getElementById('add-title').textContent='Editar Tampola';
   document.getElementById('btn-save').textContent='SALVAR ALTERAÇÕES';
   document.getElementById('f-name').value    = cap.name    ||'';
@@ -371,14 +338,10 @@ function openEdit(cap) {
   document.getElementById('f-notes').value   = cap.notes   ||'';
   document.getElementById('dup-alert').style.display='none';
   const aiRes=document.getElementById('ai-result'); if(aiRes) aiRes.style.display='none';
-  updatePhotoThumb();
-  goTo('add');
+  updatePhotoThumb(); goTo('add');
 }
 
-function cancelAdd() {
-  if (editingId) { renderDetail(editingId); goTo('detail'); }
-  else { renderList(); goTo('list'); }
-}
+function cancelAdd() { if(editingId){renderDetail(editingId);goTo('detail');}else{renderList();goTo('list');} }
 
 function getFormValues() {
   return {
@@ -393,19 +356,16 @@ function getFormValues() {
 }
 
 async function saveCap() {
-  const form = getFormValues();
+  const form=getFormValues();
   if (!form.name) return showToast('Nome obrigatório!','err');
-  const btn = document.getElementById('btn-save');
+  const btn=document.getElementById('btn-save');
   if (btn) { btn.disabled=true; btn.textContent='Salvando...'; }
   try {
     if (editingId) {
-      await dbUpdate(editingId, form);
-      showToast('Atualizada!');
-      currentCapId=editingId; editingId=null;
-      goTo('detail');
+      await dbUpdate(editingId, form); showToast('Atualizada!');
+      currentCapId=editingId; editingId=null; goTo('detail');
     } else {
-      await dbAdd(form);
-      showToast('Tampola adicionada!');
+      await dbAdd(form); showToast('Tampola adicionada!');
       editingId=null; goTo('list');
     }
   } catch(e) {
@@ -423,17 +383,15 @@ async function deleteCap(id) {
 // ── Photo / Crop ──
 function loadPhoto(file) {
   if (!file) return;
-  const mime = file.type || 'image/jpeg';
+  const mime = file.type||'image/jpeg';
   const r = new FileReader();
   r.onload = e => {
     const dataUrl = e.target.result;
-    // salva original de alta qualidade para a IA
     originalPhotoBase64 = dataUrl.split(',')[1];
     originalPhotoMime   = mime;
-    // base64 inicial = original, será substituído pelo crop depois
-    pendingPhotoBase64 = originalPhotoBase64;
-    pendingPhotoMime   = mime;
-    cropSrc=dataUrl; cropScale=1; cropX=0; cropY=0;
+    pendingPhotoBase64  = originalPhotoBase64;
+    pendingPhotoMime    = mime;
+    cropSrc=dataUrl; cropScale=1; cropX=0; cropY=0; cropRotate=0;
     openCropScreen(dataUrl);
   };
   r.readAsDataURL(file);
@@ -441,13 +399,13 @@ function loadPhoto(file) {
 
 function openCrop() {
   if (!pendingPhoto) return;
-  cropSrc=pendingPhoto; cropScale=1; cropX=0; cropY=0;
+  cropSrc=pendingPhoto; cropScale=1; cropX=0; cropY=0; cropRotate=0;
   openCropScreen(pendingPhoto);
 }
 
 function openCropScreen(src) {
-  const SIZE = Math.min(window.innerWidth,480)-48;
-  const wrap = document.getElementById('crop-wrap');
+  const SIZE=Math.min(window.innerWidth,480)-48;
+  const wrap=document.getElementById('crop-wrap');
   wrap.style.width=SIZE+'px'; wrap.style.height=SIZE+'px';
   wrap.innerHTML=`<canvas id="crop-canvas" width="${SIZE}" height="${SIZE}"
     style="width:${SIZE}px;height:${SIZE}px;display:block;touch-action:none;cursor:grab"
@@ -455,6 +413,8 @@ function openCropScreen(src) {
     onmousedown="cropDown(event)" onmousemove="cropMove(event)" onmouseup="cropUp()"></canvas>`;
   document.getElementById('crop-img').src=src;
   document.getElementById('zoom-slider').value=1;
+  document.getElementById('rotate-slider').value=0;
+  document.getElementById('rotate-label').textContent='0°';
   goTo('crop');
 }
 
@@ -467,15 +427,17 @@ function confirmCrop() {
   out.width=SIZE; out.height=SIZE;
   const ctx=out.getContext('2d');
   ctx.beginPath(); ctx.arc(SIZE/2,SIZE/2,SIZE/2,0,Math.PI*2); ctx.clip();
-  const iw=img.naturalWidth,ih=img.naturalHeight;
+  ctx.save();
+  ctx.translate(SIZE/2+cropX, SIZE/2+cropY);
+  ctx.rotate(cropRotate*Math.PI/180);
+  const iw=img.naturalWidth, ih=img.naturalHeight;
   const scale=Math.max(SIZE/iw,SIZE/ih)*cropScale;
-  ctx.drawImage(img,(SIZE-iw*scale)/2+cropX,(SIZE-ih*scale)/2+cropY,iw*scale,ih*scale);
-  pendingPhoto=out.toDataURL('image/jpeg',0.82);
-  // update base64 for AI with cropped version
+  ctx.drawImage(img, -iw*scale/2, -ih*scale/2, iw*scale, ih*scale);
+  ctx.restore();
+  pendingPhoto=out.toDataURL('image/jpeg',0.85);
   pendingPhotoBase64=pendingPhoto.split(',')[1];
   pendingPhotoMime='image/jpeg';
-  updatePhotoThumb();
-  goTo('add');
+  updatePhotoThumb(); goTo('add');
 }
 
 function updatePhotoThumb() {
@@ -485,7 +447,7 @@ function updatePhotoThumb() {
   if (pendingPhoto) {
     thumb.innerHTML=`<div style="position:relative;width:90px;height:90px;flex-shrink:0">
       <img src="${pendingPhoto}" style="width:90px;height:90px;border-radius:50%;object-fit:cover;border:2px solid ${O}"/>
-      <button onclick="pendingPhoto=null;pendingPhotoBase64=null;updatePhotoThumb()" style="position:absolute;top:-4px;right:-4px;background:#200505;border:1px solid #ef4444;color:#ef4444;border-radius:50%;width:24px;height:24px;cursor:pointer;font-size:12px;display:flex;align-items:center;justify-content:center;font-family:inherit">✕</button>
+      <button onclick="pendingPhoto=null;pendingPhotoBase64=null;originalPhotoBase64=null;updatePhotoThumb()" style="position:absolute;top:-4px;right:-4px;background:#200505;border:1px solid #ef4444;color:#ef4444;border-radius:50%;width:24px;height:24px;cursor:pointer;font-size:12px;display:flex;align-items:center;justify-content:center;font-family:inherit">✕</button>
     </div>`;
     if (aiBtnWrap) aiBtnWrap.style.display='flex';
   } else {
@@ -501,13 +463,21 @@ function drawCrop() {
   const SIZE=canvas.width;
   const ctx=canvas.getContext('2d');
   ctx.clearRect(0,0,SIZE,SIZE);
-  const iw=img.naturalWidth,ih=img.naturalHeight;
+  ctx.save();
+  ctx.translate(SIZE/2+cropX, SIZE/2+cropY);
+  ctx.rotate(cropRotate*Math.PI/180);
+  const iw=img.naturalWidth, ih=img.naturalHeight;
   const scale=Math.max(SIZE/iw,SIZE/ih)*cropScale;
-  ctx.drawImage(img,(SIZE-iw*scale)/2+cropX,(SIZE-ih*scale)/2+cropY,iw*scale,ih*scale);
+  ctx.drawImage(img, -iw*scale/2, -ih*scale/2, iw*scale, ih*scale);
+  ctx.restore();
+  // circular mask
   ctx.save();
   ctx.globalCompositeOperation='destination-in';
   ctx.beginPath(); ctx.arc(SIZE/2,SIZE/2,SIZE/2,0,Math.PI*2); ctx.fill();
   ctx.restore();
+  // update label
+  const lbl=document.getElementById('rotate-label');
+  if (lbl) lbl.textContent=Math.round(cropRotate)+'°';
 }
 
 function cropDown(e) {
@@ -544,18 +514,12 @@ function renderHome() {
   const colorMap={};
   caps.forEach(c=>{ const k=(c.color||'').trim()||'Sem cor'; colorMap[k]=(colorMap[k]||0)+1; });
   const colorList=Object.entries(colorMap).sort((a,b)=>b[1]-a[1]).slice(0,6);
-
-  const el=document.getElementById('scr-home');
-  if (!el) return;
+  const el=document.getElementById('scr-home'); if(!el) return;
   el.innerHTML=`
     <div style="padding:52px 16px 14px;display:flex;align-items:center;gap:12px">
       <div style="width:42px;height:42px;border-radius:12px;background:linear-gradient(135deg,${O},#c05500);display:flex;align-items:center;justify-content:center;font-size:22px;box-shadow:0 4px 14px ${O}40;flex-shrink:0">🍺</div>
-      <div style="flex:1">
-        <div style="font-weight:800;font-size:22px;letter-spacing:-.3px">Tampolas</div>
-        <div style="font-size:12px;color:${T.muted}">${currentUser?.displayName||'Minha coleção'}</div>
-      </div>
+      <div style="flex:1"><div style="font-weight:800;font-size:22px;letter-spacing:-.3px">Tampolas</div><div style="font-size:12px;color:${T.muted}">${currentUser?.displayName||'Minha coleção'}</div></div>
     </div>
-
     <div onclick="goTo('list');renderList()" style="margin:0 16px 14px;border-radius:20px;overflow:hidden;cursor:pointer">
       <div style="background:linear-gradient(135deg,${O},#ffaa00 55%,#ffcc44);padding:24px 20px;position:relative;overflow:hidden">
         <div style="font-size:11px;font-weight:700;letter-spacing:2px;color:rgba(0,0,0,.45);text-transform:uppercase">Total de Tampolas</div>
@@ -564,7 +528,6 @@ function renderHome() {
         <div style="position:absolute;right:-8px;top:50%;transform:translateY(-50%);font-size:90px;opacity:.12">🍺</div>
       </div>
     </div>
-
     <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin:0 16px 12px">
       ${[{l:'PAÍSES',v:countries.length,s:countries.slice(0,2).join(', ')||'Nenhum ainda',ic:'🌍'},{l:'MARCAS',v:brands.length,s:brands.slice(0,2).join(', ')||'Nenhuma ainda',ic:'🏷️'}].map(x=>`
       <div style="background:${T.card};border-radius:16px;padding:16px;border:1px solid ${T.border};position:relative;overflow:hidden">
@@ -574,37 +537,22 @@ function renderHome() {
         <div style="position:absolute;right:10px;bottom:8px;font-size:24px;opacity:.12">${x.ic}</div>
       </div>`).join('')}
     </div>
-
     ${colorList.length?`
     <div style="margin:0 16px 14px;background:${T.card};border-radius:16px;padding:16px;border:1px solid ${T.border}">
       <div style="font-size:11px;font-weight:700;color:${T.muted};letter-spacing:1.5px;text-transform:uppercase;margin-bottom:12px">🎨 Por Cor</div>
-      ${colorList.map(([cor,qtd])=>{
-        const pct=Math.round(qtd/caps.length*100);
-        return `<div style="margin-bottom:10px">
-          <div style="display:flex;justify-content:space-between;margin-bottom:4px">
-            <span style="font-size:13px;font-weight:600">${cor}</span>
-            <span style="font-size:13px;font-weight:700;color:${T.o2}">${qtd} <span style="font-size:11px;color:${T.muted}">(${pct}%)</span></span>
-          </div>
-          <div style="height:6px;background:${T.card2};border-radius:6px;overflow:hidden">
-            <div style="height:100%;width:${pct}%;background:linear-gradient(90deg,${O},${T.o2});border-radius:6px"></div>
-          </div>
-        </div>`;
-      }).join('')}
+      ${colorList.map(([cor,qtd])=>{const pct=Math.round(qtd/caps.length*100);return`<div style="margin-bottom:10px"><div style="display:flex;justify-content:space-between;margin-bottom:4px"><span style="font-size:13px;font-weight:600">${cor}</span><span style="font-size:13px;font-weight:700;color:${T.o2}">${qtd} <span style="font-size:11px;color:${T.muted}">(${pct}%)</span></span></div><div style="height:6px;background:${T.card2};border-radius:6px;overflow:hidden"><div style="height:100%;width:${pct}%;background:linear-gradient(90deg,${O},${T.o2});border-radius:6px"></div></div></div>`;}).join('')}
     </div>`:''}
-
     ${recent.length?`
     <div style="display:flex;justify-content:space-between;align-items:center;padding:0 16px;margin-bottom:8px">
       <span style="font-size:11px;font-weight:700;color:${T.muted};letter-spacing:1px;text-transform:uppercase">Recentes</span>
       <span onclick="goTo('list');renderList()" style="font-size:12px;color:${O};font-weight:700;cursor:pointer">Ver todas</span>
     </div>
-    ${recent.map(c=>capRowHTML(c)).join('')}`:''}
-  `;
+    ${recent.map(c=>capRowHTML(c)).join('')}`:''}`;
 }
 
 // ── Render: List ──
 function renderList() {
-  const el=document.getElementById('list-items');
-  const cnt=document.getElementById('list-count');
+  const el=document.getElementById('list-items'), cnt=document.getElementById('list-count');
   if (!el) return;
   const lq=searchQ.toLowerCase();
   const filtered=caps.filter(c=>!lq||c.name.toLowerCase().includes(lq)||(c.brand||'').toLowerCase().includes(lq)||(c.country||'').toLowerCase().includes(lq)||(c.color||'').toLowerCase().includes(lq));
@@ -632,11 +580,9 @@ function capRowHTML(cap) {
 function openDetail(id) { currentCapId=id; renderDetail(id); goTo('detail'); }
 
 function renderDetail(id) {
-  const cap=caps.find(c=>c.id===id);
-  if (!cap) return;
+  const cap=caps.find(c=>c.id===id); if(!cap) return;
   const fields=[['🏷️ Marca',cap.brand],['🎨 Cor',cap.color],['📍 País',cap.country],['🔢 Quantidade',cap.quantity>1?`×${cap.quantity}`:null],['📅 Adicionada',cap.addedAt]].filter(([,v])=>v);
-  const el=document.getElementById('scr-detail');
-  if (!el) return;
+  const el=document.getElementById('scr-detail'); if(!el) return;
   el.innerHTML=`
     <div style="position:relative;height:280px;overflow:hidden">
       ${cap.photo?`<img src="${cap.photo}" style="width:100%;height:100%;object-fit:cover"/>`:`<div style="width:100%;height:100%;background:linear-gradient(160deg,${O}55,${T.bg});display:flex;align-items:center;justify-content:center;font-size:110px">🍺</div>`}
@@ -660,20 +606,14 @@ function renderDetail(id) {
 }
 
 // ── Boot ──
-document.getElementById('app').innerHTML=`
-  <div style="min-height:100vh;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:14px;background:${T.bg}">
-    <div style="font-size:48px;animation:pulse 1.4s ease infinite">🍺</div>
-    <div style="color:${T.muted};font-size:14px;font-family:system-ui">Carregando...</div>
-  </div>`;
+document.getElementById('app').innerHTML=`<div style="min-height:100vh;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:14px;background:${T.bg}"><div style="font-size:48px;animation:pulse 1.4s ease infinite">🍺</div><div style="color:${T.muted};font-size:14px;font-family:system-ui">Carregando...</div></div>`;
 
 onAuthStateChanged(auth, user => {
-  currentUser=user;
-  buildApp();
+  currentUser=user; buildApp();
   if (user) { subscribeCaps(); renderHome(); goTo('home'); }
   else { if(unsubCaps){unsubCaps();unsubCaps=null;} caps=[]; goTo('login'); }
 });
 
-// expose to global
 window.loginGoogle=loginGoogle; window.logout=logout; window.goTo=goTo;
 window.openAdd=openAdd; window.openEdit=openEdit; window.openDetail=openDetail;
 window.cancelAdd=cancelAdd; window.saveCap=saveCap; window.deleteCap=deleteCap;
