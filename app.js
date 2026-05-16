@@ -11,8 +11,9 @@ const firebaseConfig = {
   messagingSenderId: "594488372191",
   appId: "1:594488372191:web:83f46233b8c4fffe23f26a"
 };
-const APP_VERSION = 'v1.9';
-const GEMINI_KEY = "AIzaSyCGXmgMtEr9vmg35-MZf_ms-Nqp8K5qbyM";
+const APP_VERSION = 'v2.0';
+const GEMINI_KEY_STORAGE = 'tampolas-gemini-key';
+let GEMINI_KEY = localStorage.getItem(GEMINI_KEY_STORAGE) || '';
 
 const firebaseApp = initializeApp(firebaseConfig);
 const auth = getAuth(firebaseApp);
@@ -244,6 +245,37 @@ function buildApp() {
     </div>
   </div>
 
+
+  <!-- SETTINGS -->
+  <div id="scr-settings" class="screen" style="display:none;padding-bottom:90px">
+    <div style="padding:52px 16px 14px;display:flex;align-items:center;gap:12px">
+      <button onclick="goTo('home')" style="${btnIconStyle()}">←</button>
+      <div style="font-weight:800;font-size:18px">Configurações</div>
+    </div>
+    <div style="padding:0 16px;display:flex;flex-direction:column;gap:16px">
+
+      <div style="background:${T.card};border-radius:16px;padding:18px;border:1px solid ${T.border}">
+        <div style="font-size:14px;font-weight:800;margin-bottom:6px">🤖 Chave da API Gemini</div>
+        <div style="font-size:12px;color:${T.muted};margin-bottom:14px;line-height:1.5">
+          Necessária para identificar tampolas por foto com IA.<br/>
+          Crie gratuitamente em <b style="color:${T.o2}">aistudio.google.com</b>
+        </div>
+        <input id="gemini-key-input" type="password" placeholder="Cole sua API key aqui..."
+          style="width:100%;background:#1a1510;border:1.5px solid ${T.border};color:${T.text};border-radius:12px;padding:12px 14px;font-size:14px;outline:none;font-family:inherit;box-sizing:border-box;margin-bottom:10px"/>
+        <button onclick="saveGeminiKey()" style="width:100%;padding:13px;border-radius:12px;border:none;background:linear-gradient(135deg,${O},#c05500);color:#fff;font-weight:800;font-size:14px;cursor:pointer;font-family:inherit">
+          SALVAR CHAVE
+        </button>
+        <div id="key-status" style="margin-top:10px;font-size:12px;text-align:center"></div>
+      </div>
+
+      <div style="background:${T.card};border-radius:16px;padding:18px;border:1px solid ${T.border}">
+        <div style="font-size:14px;font-weight:800;margin-bottom:10px">📊 Coleção</div>
+        <div style="font-size:13px;color:${T.muted}" id="settings-stats"></div>
+      </div>
+
+    </div>
+  </div>
+
   <!-- NAV -->
   <div id="bottom-nav" style="position:fixed;bottom:0;left:50%;transform:translateX(-50%);width:100%;max-width:480px;background:rgba(14,12,10,.96);border-top:1px solid ${T.border};padding:10px 8px 22px;display:flex;align-items:center;z-index:100;backdrop-filter:blur(12px)">
     <button class="nav-btn" data-scr="home" onclick="goTo('home')" style="flex:1;background:none;border:none;cursor:pointer;display:flex;flex-direction:column;align-items:center;gap:3px;padding:4px 0;color:${T.muted}">
@@ -255,10 +287,9 @@ function buildApp() {
     <div style="flex:1;display:flex;justify-content:center">
       <button onclick="openAdd()" style="width:58px;height:58px;border-radius:50%;border:none;cursor:pointer;background:linear-gradient(135deg,${O},#c05500);font-size:30px;color:#fff;box-shadow:0 4px 18px ${O}70;display:flex;align-items:center;justify-content:center">+</button>
     </div>
-    <button onclick="logout()" style="flex:1;background:none;border:none;cursor:pointer;display:flex;flex-direction:column;align-items:center;gap:3px;padding:4px 0;color:${T.muted}">
-      <span style="font-size:28px">👤</span><span style="font-size:11px;font-weight:700">Sair</span>
+    <button class="nav-btn" data-scr="settings" onclick="goTo('settings');renderSettings()" style="flex:1;background:none;border:none;cursor:pointer;display:flex;flex-direction:column;align-items:center;gap:3px;padding:4px 0;color:${T.muted}">
+      <span style="font-size:28px">⚙️</span><span style="font-size:11px;font-weight:700">Config</span>
     </button>
-    <div style="flex:1"></div>
   </div>
   <div id="toast-el"></div>`;
 }
@@ -266,6 +297,11 @@ function buildApp() {
 // ── AI ──
 async function runAI() {
   if (!pendingPhotoBase64 || aiLoading) return;
+  GEMINI_KEY = localStorage.getItem(GEMINI_KEY_STORAGE) || '';
+  if (!GEMINI_KEY) {
+    showToast('Configure a chave Gemini em ⚙️ Config', 'err');
+    return;
+  }
   aiLoading = true;
   const btn = document.getElementById('btn-ai');
   if (btn) { btn.textContent='⟳ Analisando...'; btn.disabled=true; }
@@ -635,6 +671,38 @@ function renderDetail(id) {
     </div>`;
 }
 
+// ── Settings ──
+function saveGeminiKey() {
+  const input = document.getElementById('gemini-key-input');
+  if (!input) return;
+  const key = input.value.trim();
+  if (!key) return showToast('Cole uma chave válida!', 'err');
+  localStorage.setItem(GEMINI_KEY_STORAGE, key);
+  GEMINI_KEY = key;
+  input.value = '';
+  showToast('Chave salva com sucesso!', 'ok');
+  updateKeyStatus();
+}
+
+function updateKeyStatus() {
+  const el = document.getElementById('key-status');
+  if (!el) return;
+  const key = localStorage.getItem(GEMINI_KEY_STORAGE) || '';
+  if (key) {
+    el.innerHTML = '<span style="color:#22c55e">✓ Chave configurada (' + key.slice(0,8) + '...)</span>';
+  } else {
+    el.innerHTML = '<span style="color:#ef4444">✕ Nenhuma chave configurada</span>';
+  }
+}
+
+function renderSettings() {
+  const input = document.getElementById('gemini-key-input');
+  if (input) input.value = '';
+  updateKeyStatus();
+  const stats = document.getElementById('settings-stats');
+  if (stats) stats.innerHTML = caps.length + ' tampola' + (caps.length !== 1 ? 's' : '') + ' cadastrada' + (caps.length !== 1 ? 's' : '');
+}
+
 // ── Boot ──
 document.getElementById('app').innerHTML=`<div style="min-height:100vh;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:14px;background:${T.bg}"><div style="font-size:48px;animation:pulse 1.4s ease infinite">🍺</div><div style="color:${T.muted};font-size:14px;font-family:system-ui">Carregando...</div></div>`;
 
@@ -651,5 +719,6 @@ window.checkDuplicate=checkDuplicate; window.loadPhoto=loadPhoto;
 window.openCrop=openCrop; window.confirmCrop=confirmCrop; window.drawCrop=drawCrop;
 window.cropDown=cropDown; window.cropMove=cropMove; window.cropUp=cropUp;
 window.updatePhotoThumb=updatePhotoThumb; window.renderList=renderList;
+window.saveGeminiKey=saveGeminiKey; window.renderSettings=renderSettings;
 window.rotateCrop=rotateCrop; window.rotateCropTo=rotateCropTo; window.resetCrop=resetCrop;
 window.runAI=runAI; window.applyAI=applyAI; window.dismissAI=dismissAI;
