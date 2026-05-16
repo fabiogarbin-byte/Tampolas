@@ -11,7 +11,7 @@ const firebaseConfig = {
   messagingSenderId: "594488372191",
   appId: "1:594488372191:web:83f46233b8c4fffe23f26a"
 };
-const APP_VERSION = 'v3.5';
+const APP_VERSION = 'v3.6';
 const GEMINI_KEY_STORAGE = 'tampolas-gemini-key';
 let GEMINI_KEY = '';
 function loadGeminiKey() { GEMINI_KEY = localStorage.getItem(GEMINI_KEY_STORAGE) || ''; }
@@ -282,6 +282,20 @@ function buildApp() {
         <div id="key-status" style="margin-top:10px;font-size:12px;text-align:center"></div>
       </div>
 
+      <!-- Version -->
+      <div style="background:${T.card};border-radius:16px;padding:18px;border:1px solid ${T.border}">
+        <div style="font-size:14px;font-weight:800;margin-bottom:12px">📱 Versão</div>
+        <div style="display:flex;justify-content:space-between;margin-bottom:8px">
+          <span style="font-size:13px;color:${T.muted}">Instalada no celular</span>
+          <span id="profile-version-installed" style="font-size:13px;font-weight:700;color:${T.o2}"></span>
+        </div>
+        <div style="display:flex;justify-content:space-between;margin-bottom:12px">
+          <span style="font-size:13px;color:${T.muted}">No servidor (GitHub)</span>
+          <span id="profile-version-server" style="font-size:13px;font-weight:700;color:${T.muted}">-</span>
+        </div>
+        <button data-action="check-version" style="width:100%;padding:10px;border-radius:10px;border:1px solid ${T.border};background:${T.card2};color:${T.muted};font-size:13px;font-weight:700;cursor:pointer;font-family:inherit">🔄 Verificar atualização</button>
+      </div>
+
       <!-- Logout -->
       <button data-action="logout" style="width:100%;padding:14px;border-radius:14px;border:1px solid #401010;background:#200505;color:#ef4444;font-weight:800;font-size:15px;cursor:pointer;font-family:inherit">
         Sair da conta
@@ -362,8 +376,24 @@ function showAIResult(r) {
 
 function applyAI() {
   if (!aiData) return;
-  [['f-name',aiData.name],['f-brand',aiData.brand],['f-type',aiData.type],['f-color',aiData.color],['f-country',aiData.country],['f-notes',aiData.notes]].forEach(([id,v])=>{ if(v){ const el=document.getElementById(id); if(el) el.value=v; } });
-  dismissAI(); checkDuplicate(); showToast('Dados preenchidos!','ok');
+  const fields = [
+    ['f-name',    aiData.name],
+    ['f-brand',   aiData.brand],
+    ['f-type',    aiData.type || aiData.beverage || aiData.drink],
+    ['f-color',   aiData.color],
+    ['f-country', aiData.country],
+    ['f-notes',   aiData.notes],
+  ];
+  let filled = 0;
+  fields.forEach(([id, v]) => {
+    if (v) {
+      const el = document.getElementById(id);
+      if (el) { el.value = v; filled++; }
+    }
+  });
+  dismissAI();
+  checkDuplicate();
+  showToast(filled + ' campo(s) preenchido(s)!', 'ok');
 }
 
 function dismissAI() { const el=document.getElementById('ai-result'); if(el) el.style.display='none'; aiData=null; }
