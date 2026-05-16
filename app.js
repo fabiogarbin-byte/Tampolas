@@ -41,6 +41,8 @@ let pendingPhoto = null;
 let cropSrc = null, cropScale = 1, cropX = 0, cropY = 0;
 let cropDragging = false, cropLastX = 0, cropLastY = 0, cropPinchDist = 0;
 let aiLoading    = false;
+let originalPhotoBase64 = null;
+let originalPhotoMime   = null;
 
 // ── Firestore ──
 function capsCol() { return collection(db, 'users', currentUser.uid, 'caps'); }
@@ -285,7 +287,8 @@ async function runAI() {
   const btn = document.getElementById('btn-ai');
   if (btn) { btn.textContent = '⟳ Analisando...'; btn.disabled = true; }
   try {
-    const result = await analyzePhotoWithAI(pendingPhotoBase64, pendingPhotoMime);
+    // usa foto original (máxima qualidade) para melhor reconhecimento
+  const result = await analyzePhotoWithAI(originalPhotoBase64||pendingPhotoBase64, originalPhotoMime||pendingPhotoMime);
     aiData = result;
     showAIResult(result);
     showToast('✨ IA identificou a tampola!', 'ai');
@@ -343,7 +346,7 @@ function checkDuplicate() {
 
 // ── Add / Edit ──
 function openAdd() {
-  editingId=null; pendingPhoto=null; pendingPhotoBase64=null; pendingPhotoMime=null; aiData=null;
+  editingId=null; pendingPhoto=null; pendingPhotoBase64=null; pendingPhotoMime=null; originalPhotoBase64=null; originalPhotoMime=null; aiData=null;
   document.getElementById('add-title').textContent='Nova Tampola';
   document.getElementById('btn-save').textContent='SALVAR TAMPOLA';
   ['f-name','f-brand','f-color','f-country','f-notes'].forEach(id=>{
@@ -357,7 +360,7 @@ function openAdd() {
 }
 
 function openEdit(cap) {
-  editingId=cap.id; pendingPhoto=cap.photo||null; pendingPhotoBase64=null; pendingPhotoMime=null; aiData=null;
+  editingId=cap.id; pendingPhoto=cap.photo||null; pendingPhotoBase64=null; pendingPhotoMime=null; originalPhotoBase64=null; originalPhotoMime=null; aiData=null;
   document.getElementById('add-title').textContent='Editar Tampola';
   document.getElementById('btn-save').textContent='SALVAR ALTERAÇÕES';
   document.getElementById('f-name').value    = cap.name    ||'';
@@ -424,7 +427,11 @@ function loadPhoto(file) {
   const r = new FileReader();
   r.onload = e => {
     const dataUrl = e.target.result;
-    pendingPhotoBase64 = dataUrl.split(',')[1];
+    // salva original de alta qualidade para a IA
+    originalPhotoBase64 = dataUrl.split(',')[1];
+    originalPhotoMime   = mime;
+    // base64 inicial = original, será substituído pelo crop depois
+    pendingPhotoBase64 = originalPhotoBase64;
     pendingPhotoMime   = mime;
     cropSrc=dataUrl; cropScale=1; cropX=0; cropY=0;
     openCropScreen(dataUrl);
