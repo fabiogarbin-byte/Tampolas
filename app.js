@@ -11,7 +11,7 @@ const firebaseConfig = {
   messagingSenderId: "594488372191",
   appId: "1:594488372191:web:83f46233b8c4fffe23f26a"
 };
-const APP_VERSION = 'v1.5';
+const APP_VERSION = 'v1.7';
 const GEMINI_KEY = "AIzaSyCGXmgMtEr9vmg35-MZf_ms-Nqp8K5qbyM";
 
 const firebaseApp = initializeApp(firebaseConfig);
@@ -61,7 +61,7 @@ async function analyzePhotoWithAI(base64, mimeType) {
 {"name":"nome identificador (marca+característica, ex: Brahma Vermelha 350ml)","brand":"fabricante/marca","color":"cor predominante em texto (ex: Vermelha, Dourada, Azul)","country":"país de origem","notes":"descrição breve do design e bebida"}
 Se não identificar algum campo deixe string vazia. Retorne SOMENTE o JSON.`;
 
-  const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${GEMINI_KEY}`, {
+  const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${GEMINI_KEY}`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ contents: [{ parts: [{ inline_data: { mime_type: mimeType, data: base64 } }, { text: prompt }] }] })
@@ -222,17 +222,17 @@ function buildApp() {
       <div>
         <div style="${lblStyle()}">Rotação</div>
         <div style="display:flex;align-items:center;gap:10px">
-          <button onclick="cropRotate-=15;if(cropRotate<-180)cropRotate+=360;document.getElementById('rotate-slider').value=cropRotate;drawCrop()"
+          <button onclick="rotateCrop(-15)"
             style="width:44px;height:44px;border-radius:10px;border:1px solid ${T.border};background:${T.card2};color:${T.text};font-size:20px;cursor:pointer;flex-shrink:0;font-family:inherit">↺</button>
           <input id="rotate-slider" type="range" min="-180" max="180" step="1" value="0"
-            oninput="cropRotate=parseFloat(this.value);drawCrop()"
+            oninput="rotateCropTo(parseFloat(this.value))"
             style="flex:1;accent-color:${O}"/>
-          <button onclick="cropRotate+=15;if(cropRotate>180)cropRotate-=360;document.getElementById('rotate-slider').value=cropRotate;drawCrop()"
+          <button onclick="rotateCrop(15)"
             style="width:44px;height:44px;border-radius:10px;border:1px solid ${T.border};background:${T.card2};color:${T.text};font-size:20px;cursor:pointer;flex-shrink:0;font-family:inherit">↻</button>
         </div>
         <div style="text-align:center;font-size:12px;color:${T.muted};margin-top:4px" id="rotate-label">0°</div>
       </div>
-      <button onclick="cropRotate=0;cropScale=1;cropX=0;cropY=0;document.getElementById('zoom-slider').value=1;document.getElementById('rotate-slider').value=0;document.getElementById('rotate-label').textContent='0°';drawCrop()"
+      <button onclick="resetCrop()"
         style="padding:10px;border-radius:10px;border:1px solid ${T.border};background:${T.card2};color:${T.muted};font-weight:700;font-size:13px;cursor:pointer;font-family:inherit">
         ↺ Resetar
       </button>
@@ -481,6 +481,35 @@ function drawCrop() {
   if (lbl) lbl.textContent=Math.round(cropRotate)+'°';
 }
 
+function rotateCrop(delta) {
+  cropRotate += delta;
+  if (cropRotate > 180) cropRotate -= 360;
+  if (cropRotate < -180) cropRotate += 360;
+  const slider = document.getElementById('rotate-slider');
+  const label  = document.getElementById('rotate-label');
+  if (slider) slider.value = cropRotate;
+  if (label)  label.textContent = Math.round(cropRotate) + '°';
+  drawCrop();
+}
+
+function rotateCropTo(val) {
+  cropRotate = val;
+  const label = document.getElementById('rotate-label');
+  if (label) label.textContent = Math.round(cropRotate) + '°';
+  drawCrop();
+}
+
+function resetCrop() {
+  cropRotate = 0; cropScale = 1; cropX = 0; cropY = 0;
+  const zSlider = document.getElementById('zoom-slider');
+  const rSlider = document.getElementById('rotate-slider');
+  const label   = document.getElementById('rotate-label');
+  if (zSlider) zSlider.value = 1;
+  if (rSlider) rSlider.value = 0;
+  if (label)   label.textContent = '0°';
+  drawCrop();
+}
+
 function cropDown(e) {
   e.preventDefault();
   if (e.touches&&e.touches.length===2) {
@@ -622,4 +651,5 @@ window.checkDuplicate=checkDuplicate; window.loadPhoto=loadPhoto;
 window.openCrop=openCrop; window.confirmCrop=confirmCrop; window.drawCrop=drawCrop;
 window.cropDown=cropDown; window.cropMove=cropMove; window.cropUp=cropUp;
 window.updatePhotoThumb=updatePhotoThumb; window.renderList=renderList;
+window.rotateCrop=rotateCrop; window.rotateCropTo=rotateCropTo; window.resetCrop=resetCrop;
 window.runAI=runAI; window.applyAI=applyAI; window.dismissAI=dismissAI;
