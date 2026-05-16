@@ -11,7 +11,7 @@ const firebaseConfig = {
   messagingSenderId: "594488372191",
   appId: "1:594488372191:web:83f46233b8c4fffe23f26a"
 };
-const APP_VERSION = 'v2.4';
+const APP_VERSION = 'v2.7';
 const GEMINI_KEY_STORAGE = 'tampolas-gemini-key';
 let GEMINI_KEY = '';
 function loadGeminiKey() { GEMINI_KEY = localStorage.getItem(GEMINI_KEY_STORAGE) || ''; }
@@ -307,14 +307,25 @@ function buildApp() {
 
 // ── AI ──
 async function runAI() {
-  if (!pendingPhotoBase64 || aiLoading) return;
+  // force reset any stuck state
+  aiLoading = false;
+  const btn = document.getElementById('btn-ai');
+  if (btn) { btn.disabled = false; }
+
+  // reload key every time
   GEMINI_KEY = localStorage.getItem(GEMINI_KEY_STORAGE) || '';
+
   if (!GEMINI_KEY) {
-    showToast('Configure a chave Gemini em 👤 Perfil', 'err');
+    showToast('⚠️ Cole sua chave Gemini em 👤 Perfil', 'err');
+    goTo('profile'); renderProfile();
     return;
   }
+  if (!pendingPhotoBase64) {
+    showToast('Selecione uma foto primeiro', 'err');
+    return;
+  }
+
   aiLoading = true;
-  const btn = document.getElementById('btn-ai');
   if (btn) { btn.textContent='⟳ Analisando...'; btn.disabled=true; }
   try {
     const result = await analyzePhotoWithAI(originalPhotoBase64||pendingPhotoBase64, originalPhotoMime||pendingPhotoMime);
