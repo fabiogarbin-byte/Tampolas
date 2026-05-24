@@ -11,7 +11,7 @@ const firebaseConfig = {
   messagingSenderId: "594488372191",
   appId: "1:594488372191:web:83f46233b8c4fffe23f26a"
 };
-const APP_VERSION = 'v4.4';
+const APP_VERSION = 'v4.5';
 const COUNTRY_FLAGS = {
   'brasil': '🇧🇷', 'brazil': '🇧🇷',
   'alemanha': '🇩🇪', 'germany': '🇩🇪',
@@ -1777,7 +1777,7 @@ async function aiOptimizePhoto() {
 {"brightness": <número 60-140>, "contrast": <número 80-140>, "saturation": <número 80-160>, "reason": "<explicação curta em português>"}
 Considere: se a foto estiver escura aumente brilho, se sem cor aumente saturação, se sem definição aumente contraste. Retorne SOMENTE o JSON.`;
 
-    const res = await fetch(\`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=\${GEMINI_KEY}\`, {
+    const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${GEMINI_KEY}`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ contents: [{ parts: [
@@ -1790,7 +1790,7 @@ Considere: se a foto estiver escura aumente brilho, se sem cor aumente saturaç�
     const data = await res.json();
     if (data.error) throw new Error(data.error.message);
     const text = data.candidates?.[0]?.content?.parts?.[0]?.text || '';
-    const clean = text.replace(/\`\`\`json|\`\`\`/g, '').trim();
+    const clean = text.replace(/```json|```/g, '').trim();
     const result = JSON.parse(clean.match(/\{[\s\S]*\}/)[0]);
 
     // Apply suggested values
