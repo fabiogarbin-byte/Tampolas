@@ -11,7 +11,7 @@ const firebaseConfig = {
   messagingSenderId: "594488372191",
   appId: "1:594488372191:web:83f46233b8c4fffe23f26a"
 };
-const APP_VERSION = 'v4.1';
+const APP_VERSION = 'v4.2';
 const COUNTRY_FLAGS = {
   'brasil': '🇧🇷', 'brazil': '🇧🇷',
   'alemanha': '🇩🇪', 'germany': '🇩🇪',
@@ -441,6 +441,40 @@ function buildApp() {
     <div id="map-content" style="padding:0 16px"></div>
   </div>
 
+
+  <!-- PHOTO OPTIMIZE -->
+  <div id="scr-photo-opt" class="screen" style="display:none;padding-bottom:90px">
+    <div style="padding:52px 16px 14px;display:flex;align-items:center;gap:12px">
+      <button data-action="back-from-opt" style="${btnIconStyle()}">←</button>
+      <div><div style="font-weight:800;font-size:18px">✨ Otimizar Foto</div>
+      <div style="font-size:11px;color:${T.muted}">Ajuste brilho, contraste e saturação</div></div>
+    </div>
+    <div style="padding:0 16px;display:flex;flex-direction:column;gap:14px">
+      <!-- Preview -->
+      <div style="width:100%;aspect-ratio:1;border-radius:16px;overflow:hidden;background:#1e1a16;border:1px solid #2e2618;display:flex;align-items:center;justify-content:center">
+        <canvas id="opt-canvas" style="width:100%;height:100%;object-fit:contain;border-radius:50%"></canvas>
+      </div>
+      <!-- Controls -->
+      <div style="background:#1e1a16;border-radius:14px;padding:16px;border:1px solid #2e2618;display:flex;flex-direction:column;gap:14px">
+        ${[
+          {id:'opt-brightness', label:'☀️ Brilho',     min:50,  max:150, val:100},
+          {id:'opt-contrast',   label:'⬛ Contraste',   min:50,  max:150, val:100},
+          {id:'opt-saturation', label:'🎨 Saturação',   min:0,   max:200, val:100},
+          {id:'opt-sharpness',  label:'🔍 Nitidez',     min:0,   max:5,   val:0, step:0.5},
+        ].map(s=>`<div>
+          <div style="display:flex;justify-content:space-between;margin-bottom:6px">
+            <span style="font-size:13px;font-weight:600">${s.label}</span>
+            <span id="${s.id}-val" style="font-size:12px;color:#7a6a58">${s.val}${s.max<=5?'':' %'}</span>
+          </div>
+          <input type="range" data-opt="${s.id}" min="${s.min}" max="${s.max}" step="${s.step||1}" value="${s.val}"
+            style="width:100%;accent-color:#ff8c00"/>
+        </div>`).join('')}
+        <button data-action="opt-reset" style="padding:10px;border-radius:10px;border:1px solid #2e2618;background:#252018;color:#7a6a58;font-weight:700;font-size:13px;cursor:pointer;font-family:inherit">↺ Resetar</button>
+      </div>
+      <button data-action="opt-confirm" style="width:100%;padding:16px;border-radius:14px;border:none;background:linear-gradient(135deg,#ff8c00,#c05500);color:#fff;font-weight:800;font-size:16px;cursor:pointer;font-family:inherit">✓ Aplicar e Salvar</button>
+    </div>
+  </div>
+
   <!-- NAV -->
   <div id="bottom-nav" style="position:fixed;bottom:0;left:50%;transform:translateX(-50%);width:100%;max-width:480px;background:rgba(14,12,10,.96);border-top:1px solid ${T.border};padding:10px 8px 22px;display:flex;align-items:center;z-index:100;backdrop-filter:blur(12px)">
     <button class="nav-btn" data-scr="home" data-action="goto-home" style="flex:1;background:none;border:none;cursor:pointer;display:flex;flex-direction:column;align-items:center;gap:3px;padding:4px 0;color:${T.muted}">
@@ -557,7 +591,8 @@ function openAdd() {
   editingId=null; pendingPhoto=null; pendingPhotoBase64=null; pendingPhotoMime=null;
   originalPhotoBase64=null; originalPhotoMime=null; aiData=null;
   document.getElementById('add-title').textContent='Nova Tampola';
-  document.getElementById('btn-save').textContent='SALVAR TAMPOLA';
+  const bsave = document.getElementById('btn-save');
+  if (bsave) { bsave.textContent='SALVAR TAMPOLA'; bsave.disabled=false; }
   resetForm(); updatePhotoThumb(); goTo('add');
 }
 
@@ -565,7 +600,8 @@ function openEdit(cap) {
   editingId=cap.id; pendingPhoto=cap.photo||null; pendingPhotoBase64=null; pendingPhotoMime=null;
   originalPhotoBase64=null; originalPhotoMime=null; aiData=null;
   document.getElementById('add-title').textContent='Editar Tampola';
-  document.getElementById('btn-save').textContent='SALVAR ALTERAÇÕES';
+  const bsave = document.getElementById('btn-save');
+  if (bsave) { bsave.textContent='SALVAR ALTERAÇÕES'; bsave.disabled=false; }
   document.getElementById('f-name').value    = cap.name    ||'';
   document.getElementById('f-brand').value   = cap.brand   ||'';
   document.getElementById('f-type').value    = cap.type    ||'';
@@ -728,9 +764,13 @@ function updatePhotoThumb() {
       <button data-action="remove-photo" style="position:absolute;top:-4px;right:-4px;background:#200505;border:1px solid #ef4444;color:#ef4444;border-radius:50%;width:24px;height:24px;cursor:pointer;font-size:12px;display:flex;align-items:center;justify-content:center;font-family:inherit">✕</button>
     </div>`;
     if (aiBtnWrap) aiBtnWrap.style.display='flex';
+    const btnOpt = document.getElementById('btn-opt');
+    if (btnOpt) btnOpt.style.display='block';
   } else {
     thumb.innerHTML=`<div style="width:90px;height:90px;border-radius:50%;background:${T.card2};border:2px dashed ${T.border};display:flex;align-items:center;justify-content:center;font-size:32px;flex-shrink:0">🍺</div>`;
     if (aiBtnWrap) aiBtnWrap.style.display='none';
+    const btnOpt2 = document.getElementById('btn-opt');
+    if (btnOpt2) btnOpt2.style.display='none';
   }
 }
 
@@ -1553,6 +1593,20 @@ document.addEventListener('click', function(e) {
   if (action === 'goto-stats')    { goTo('stats'); renderStats(); return; }
   if (action === 'goto-achievements') { goTo('achievements'); renderAchievements(); return; }
   if (action === 'goto-map')         { goTo('map'); renderMap(); return; }
+  if (action === 'open-photo-opt')  { openPhotoOpt(); return; }
+  if (action === 'back-from-opt')   { goTo('add'); return; }
+  if (action === 'opt-reset') {
+    optFilters = {brightness:100,contrast:100,saturation:100,sharpness:0};
+    document.querySelectorAll('[data-opt]').forEach(s => {
+      const def = {brightness:100,contrast:100,saturation:100,sharpness:0};
+      const key = s.dataset.opt.replace('opt-','');
+      s.value = def[key] ?? 100;
+      const vEl = document.getElementById(s.dataset.opt+'-val');
+      if(vEl) vEl.textContent = s.value+(parseFloat(s.max)<=5?'':' %');
+    });
+    drawOptPreview(); return;
+  }
+  if (action === 'opt-confirm')     { applyOptFilters(); return; }
   if (action === 'goto-museum-list') { museumIndex=0; renderMuseum(); goTo('museum'); return; }
   if (action === 'museum-prev')      { museumIndex--; renderMuseum(); return; }
   if (action === 'museum-next')      { museumIndex++; renderMuseum(); return; }
@@ -1601,10 +1655,77 @@ document.addEventListener('change', function(e) {
 });
 
 document.addEventListener('input', function(e) {
+  const optKey = e.target.dataset.opt;
+  if (optKey) {
+    const key = optKey.replace('opt-','');
+    optFilters[key] = parseFloat(e.target.value);
+    const vEl = document.getElementById(optKey+'-val');
+    if (vEl) vEl.textContent = e.target.value+(parseFloat(e.target.max)<=5?'':' %');
+    drawOptPreview();
+    return;
+  }
   const action = e.target.dataset.action;
   if (action === 'zoom-change')   { cropScale = parseFloat(e.target.value); drawCrop(); }
   if (action === 'rotate-change') { rotateCropTo(parseFloat(e.target.value)); }
 });
+
+
+// ── Photo Optimization ──
+let optFilters = { brightness:100, contrast:100, saturation:100, sharpness:0 };
+
+function openPhotoOpt() {
+  if (!pendingPhoto) return;
+  optFilters = { brightness:100, contrast:100, saturation:100, sharpness:0 };
+  goTo('photo-opt');
+  setTimeout(() => {
+    drawOptPreview();
+    // reset sliders
+    ['opt-brightness','opt-contrast','opt-saturation','opt-sharpness'].forEach(id => {
+      const el = document.getElementById(id); // these use data-opt, not id
+    });
+    document.querySelectorAll('[data-opt]').forEach(s => {
+      const def = {brightness:100,contrast:100,saturation:100,sharpness:0};
+      s.value = def[s.dataset.opt.replace('opt-','')] ?? 100;
+      const vEl = document.getElementById(s.dataset.opt+'-val');
+      if(vEl) vEl.textContent = s.value + (parseFloat(s.max)<=5?'':' %');
+    });
+  }, 50);
+}
+
+function drawOptPreview() {
+  const canvas = document.getElementById('opt-canvas');
+  if (!canvas || !pendingPhoto) return;
+  const img = new Image();
+  img.onload = () => {
+    const size = Math.min(img.width, img.height);
+    canvas.width = size; canvas.height = size;
+    const ctx = canvas.getContext('2d');
+    // circular clip
+    ctx.beginPath(); ctx.arc(size/2,size/2,size/2,0,Math.PI*2); ctx.clip();
+    ctx.drawImage(img, (img.width-size)/2, (img.height-size)/2, size, size, 0, 0, size, size);
+    // apply filters via CSS filter string
+    canvas.style.filter = `brightness(${optFilters.brightness}%) contrast(${optFilters.contrast}%) saturate(${optFilters.saturation}%)`;
+  };
+  img.src = pendingPhoto;
+}
+
+function applyOptFilters() {
+  const canvas = document.getElementById('opt-canvas');
+  if (!canvas) return;
+  // render to new canvas with filters baked in
+  const out = document.createElement('canvas');
+  out.width = canvas.width; out.height = canvas.height;
+  const ctx = out.getContext('2d');
+  ctx.filter = canvas.style.filter;
+  ctx.beginPath(); ctx.arc(canvas.width/2,canvas.height/2,canvas.width/2,0,Math.PI*2); ctx.clip();
+  ctx.drawImage(canvas, 0, 0);
+  pendingPhoto = out.toDataURL('image/jpeg', 0.85);
+  pendingPhotoBase64 = pendingPhoto.split(',')[1];
+  pendingPhotoMime = 'image/jpeg';
+  updatePhotoThumb();
+  showToast('Foto otimizada!', 'ok');
+  goTo('add');
+}
 
 // ── Boot ──
 document.getElementById('app').innerHTML=`<div style="min-height:100vh;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:14px;background:${T.bg}"><div style="font-size:48px;animation:pulse 1.4s ease infinite">🍺</div><div style="color:${T.muted};font-size:14px;font-family:system-ui">Carregando...</div></div>`;
@@ -1623,6 +1744,6 @@ window.checkDuplicate=checkDuplicate; window.loadPhoto=loadPhoto;
 window.openCrop=openCrop; window.confirmCrop=confirmCrop; window.drawCrop=drawCrop;
 window.cropDown=cropDown; window.cropMove=cropMove; window.cropUp=cropUp;
 window.updatePhotoThumb=updatePhotoThumb; window.renderList=renderList;
-window.saveGeminiKey=saveGeminiKey; window.checkServerVersion=checkServerVersion; window.renderStats=renderStats; window.searchByPhoto=searchByPhoto; window.loadPsPhoto=loadPsPhoto; window.renderAchievements=renderAchievements; window.renderMap=renderMap; window.openMuseum=openMuseum; window.shareCap=shareCap; window.loadGeminiKey=loadGeminiKey; window.triggerCamera=triggerCamera; window.triggerGallery=triggerGallery; window.renderProfile=renderProfile; window.updateNavAvatar=updateNavAvatar; window.renderSettings=renderSettings;
+window.saveGeminiKey=saveGeminiKey; window.openPhotoOpt=openPhotoOpt; window.applyOptFilters=applyOptFilters; window.drawOptPreview=drawOptPreview; window.checkServerVersion=checkServerVersion; window.renderStats=renderStats; window.searchByPhoto=searchByPhoto; window.loadPsPhoto=loadPsPhoto; window.renderAchievements=renderAchievements; window.renderMap=renderMap; window.openMuseum=openMuseum; window.shareCap=shareCap; window.loadGeminiKey=loadGeminiKey; window.triggerCamera=triggerCamera; window.triggerGallery=triggerGallery; window.renderProfile=renderProfile; window.updateNavAvatar=updateNavAvatar; window.renderSettings=renderSettings;
 window.rotateCrop=rotateCrop; window.rotateCropTo=rotateCropTo; window.resetCrop=resetCrop;
 window.runAI=runAI; window.applyAI=applyAI; window.dismissAI=dismissAI;
