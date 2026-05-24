@@ -11,7 +11,7 @@ const firebaseConfig = {
   messagingSenderId: "594488372191",
   appId: "1:594488372191:web:83f46233b8c4fffe23f26a"
 };
-const APP_VERSION = 'v4.2';
+const APP_VERSION = 'v4.4';
 const COUNTRY_FLAGS = {
   'brasil': '🇧🇷', 'brazil': '🇧🇷',
   'alemanha': '🇩🇪', 'germany': '🇩🇪',
@@ -454,6 +454,11 @@ function buildApp() {
       <div style="width:100%;aspect-ratio:1;border-radius:16px;overflow:hidden;background:#1e1a16;border:1px solid #2e2618;display:flex;align-items:center;justify-content:center">
         <canvas id="opt-canvas" style="width:100%;height:100%;object-fit:contain;border-radius:50%"></canvas>
       </div>
+      <!-- AI Optimize button -->
+      <button id="btn-ai-opt" data-action="ai-optimize-photo" style="width:100%;padding:14px;border-radius:14px;border:none;background:linear-gradient(135deg,#7c3aed,#4f46e5);color:#fff;font-weight:800;font-size:15px;cursor:pointer;font-family:inherit;display:flex;align-items:center;justify-content:center;gap:8px">
+        ✨ Otimizar com IA
+      </button>
+
       <!-- Controls -->
       <div style="background:#1e1a16;border-radius:14px;padding:16px;border:1px solid #2e2618;display:flex;flex-direction:column;gap:14px">
         ${[
@@ -1039,7 +1044,7 @@ function renderDetail(id) {
   const el=document.getElementById('scr-detail'); if(!el) return;
   el.innerHTML=`
     <div style="position:relative;height:280px;overflow:hidden">
-      ${cap.photo?`<img src="${cap.photo}" style="width:100%;height:100%;object-fit:cover"/>`:`<div style="width:100%;height:100%;background:linear-gradient(160deg,${O}55,${T.bg});display:flex;align-items:center;justify-content:center;font-size:110px">🍺</div>`}
+      ${cap.photo?`<img src="${cap.photo}" data-action="expand-photo" data-src="${cap.photo}" style="width:100%;height:100%;object-fit:cover;cursor:zoom-in"/>`:`<div style="width:100%;height:100%;background:linear-gradient(160deg,${O}55,${T.bg});display:flex;align-items:center;justify-content:center;font-size:110px">🍺</div>`}
       <div style="position:absolute;inset:0;background:linear-gradient(to bottom,rgba(0,0,0,.15),rgba(20,18,16,.97))"></div>
       <button data-action="goto-list" style="position:absolute;top:52px;left:16px;background:rgba(0,0,0,.45);border:1px solid rgba(255,255,255,.1);color:${T.text};border-radius:10px;padding:8px 12px;cursor:pointer;font-size:18px">←</button>
       <div style="position:absolute;bottom:16px;left:16px;right:16px">
@@ -1305,6 +1310,26 @@ function openMuseum(startId) {
   if (museumIndex < 0) museumIndex = 0;
   renderMuseum();
   goTo('museum');
+  attachMuseumSwipe();
+}
+
+function attachMuseumSwipe() {
+  const scr = document.getElementById('scr-museum');
+  if (!scr || scr._swipeAttached) return;
+  scr._swipeAttached = true;
+  let startX = 0, startY = 0;
+  scr.addEventListener('touchstart', e => {
+    startX = e.touches[0].clientX;
+    startY = e.touches[0].clientY;
+  }, { passive:true });
+  scr.addEventListener('touchend', e => {
+    const dx = e.changedTouches[0].clientX - startX;
+    const dy = Math.abs(e.changedTouches[0].clientY - startY);
+    if (Math.abs(dx) > 50 && dy < 80) {
+      if (dx < 0) { museumIndex++; renderMuseum(); }
+      else        { museumIndex--; renderMuseum(); }
+    }
+  }, { passive:true });
 }
 
 function renderMuseum() {
@@ -1555,7 +1580,7 @@ function updateNavAvatar() {
 
 // ── Event delegation — handles dynamically created buttons ──
 document.addEventListener('click', function(e) {
-  const el = e.target.closest('[data-action],[id]');
+  const el = e.target.closest('[data-action],[data-filter-type],[data-sort],[data-id],[id]');
   if (!el) return;
 
   const action = el.dataset.action;
@@ -1594,6 +1619,7 @@ document.addEventListener('click', function(e) {
   if (action === 'goto-achievements') { goTo('achievements'); renderAchievements(); return; }
   if (action === 'goto-map')         { goTo('map'); renderMap(); return; }
   if (action === 'open-photo-opt')  { openPhotoOpt(); return; }
+  if (action === 'ai-optimize-photo') { aiOptimizePhoto(); return; }
   if (action === 'back-from-opt')   { goTo('add'); return; }
   if (action === 'opt-reset') {
     optFilters = {brightness:100,contrast:100,saturation:100,sharpness:0};
@@ -1612,6 +1638,16 @@ document.addEventListener('click', function(e) {
   if (action === 'museum-next')      { museumIndex++; renderMuseum(); return; }
   if (action === 'museum-edit')      { if(dataId){ const c=caps.find(x=>x.id===dataId); if(c) openEdit(c); } return; }
   if (action === 'museum-from-detail'){ if(dataId){ openMuseum(dataId); } return; }
+  if (action === 'expand-photo') {
+    const src = el.dataset.src;
+    if (!src) return;
+    const overlay = document.createElement('div');
+    overlay.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,.95);z-index:9999;display:flex;align-items:center;justify-content:center;cursor:zoom-out';
+    overlay.innerHTML = `<img src="${src}" style="max-width:100%;max-height:100%;object-fit:contain;border-radius:12px"/>`;
+    overlay.addEventListener('click', () => overlay.remove());
+    document.body.appendChild(overlay);
+    return;
+  }
   if (action === 'share-cap')        { if(dataId){ const c=caps.find(x=>x.id===dataId); if(c) shareCap(c); } return; }
   if (action === 'search-by-photo') { psPhotoBase64=null; psPhotoMime=null; const t=document.getElementById('ps-thumb'); if(t) t.innerHTML='<div style="text-align:center;color:#3a3028"><div style="font-size:40px;margin-bottom:8px">📷</div><div style="font-size:13px;color:#7a6a58">Tire ou selecione uma foto</div></div>'; const b=document.getElementById('ps-btn-search'); if(b){b.style.display='none';b.disabled=false;} const r=document.getElementById('ps-result'); if(r)r.style.display='none'; goTo('photo-search'); return; }
   if (action === 'ps-camera')  { const el=document.getElementById('ps-cam'); if(el){el.value='';el.click();} return; }
@@ -1727,6 +1763,66 @@ function applyOptFilters() {
   goTo('add');
 }
 
+
+async function aiOptimizePhoto() {
+  if (!pendingPhotoBase64) return;
+  GEMINI_KEY = localStorage.getItem(GEMINI_KEY_STORAGE) || '';
+  if (!GEMINI_KEY) { showToast('Configure a chave Gemini em 👤 Perfil', 'err'); return; }
+
+  const btn = document.getElementById('btn-ai-opt');
+  if (btn) { btn.textContent = '⟳ Analisando foto...'; btn.disabled = true; }
+
+  try {
+    const prompt = `Analise esta foto de uma tampinha de garrafa e retorne APENAS um JSON com os melhores ajustes para melhorar a qualidade visual, sem markdown:
+{"brightness": <número 60-140>, "contrast": <número 80-140>, "saturation": <número 80-160>, "reason": "<explicação curta em português>"}
+Considere: se a foto estiver escura aumente brilho, se sem cor aumente saturação, se sem definição aumente contraste. Retorne SOMENTE o JSON.`;
+
+    const res = await fetch(\`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=\${GEMINI_KEY}\`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ contents: [{ parts: [
+        { inline_data: { mime_type: pendingPhotoMime||'image/jpeg', data: pendingPhotoBase64 } },
+        { text: prompt }
+      ]}]})
+    });
+
+    if (!res.ok) throw new Error('HTTP ' + res.status);
+    const data = await res.json();
+    if (data.error) throw new Error(data.error.message);
+    const text = data.candidates?.[0]?.content?.parts?.[0]?.text || '';
+    const clean = text.replace(/\`\`\`json|\`\`\`/g, '').trim();
+    const result = JSON.parse(clean.match(/\{[\s\S]*\}/)[0]);
+
+    // Apply suggested values
+    const newFilters = {
+      brightness: Math.min(150, Math.max(50,  result.brightness  || 100)),
+      contrast:   Math.min(150, Math.max(50,  result.contrast    || 100)),
+      saturation: Math.min(200, Math.max(0,   result.saturation  || 100)),
+      sharpness:  optFilters.sharpness,
+    };
+    optFilters = newFilters;
+
+    // Update sliders visually
+    document.querySelectorAll('[data-opt]').forEach(s => {
+      const key = s.dataset.opt.replace('opt-', '');
+      if (newFilters[key] !== undefined) {
+        s.value = newFilters[key];
+        const vEl = document.getElementById(s.dataset.opt + '-val');
+        if (vEl) vEl.textContent = newFilters[key] + (parseFloat(s.max) <= 5 ? '' : ' %');
+      }
+    });
+
+    drawOptPreview();
+    showToast(result.reason ? '✨ ' + result.reason : '✨ Foto otimizada pela IA!', 'ai');
+
+  } catch(e) {
+    console.error('AI opt error:', e);
+    showToast('Erro: ' + (e.message || 'Tente novamente'), 'err');
+  } finally {
+    if (btn) { btn.textContent = '✨ Otimizar com IA'; btn.disabled = false; }
+  }
+}
+
 // ── Boot ──
 document.getElementById('app').innerHTML=`<div style="min-height:100vh;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:14px;background:${T.bg}"><div style="font-size:48px;animation:pulse 1.4s ease infinite">🍺</div><div style="color:${T.muted};font-size:14px;font-family:system-ui">Carregando...</div></div>`;
 
@@ -1744,6 +1840,6 @@ window.checkDuplicate=checkDuplicate; window.loadPhoto=loadPhoto;
 window.openCrop=openCrop; window.confirmCrop=confirmCrop; window.drawCrop=drawCrop;
 window.cropDown=cropDown; window.cropMove=cropMove; window.cropUp=cropUp;
 window.updatePhotoThumb=updatePhotoThumb; window.renderList=renderList;
-window.saveGeminiKey=saveGeminiKey; window.openPhotoOpt=openPhotoOpt; window.applyOptFilters=applyOptFilters; window.drawOptPreview=drawOptPreview; window.checkServerVersion=checkServerVersion; window.renderStats=renderStats; window.searchByPhoto=searchByPhoto; window.loadPsPhoto=loadPsPhoto; window.renderAchievements=renderAchievements; window.renderMap=renderMap; window.openMuseum=openMuseum; window.shareCap=shareCap; window.loadGeminiKey=loadGeminiKey; window.triggerCamera=triggerCamera; window.triggerGallery=triggerGallery; window.renderProfile=renderProfile; window.updateNavAvatar=updateNavAvatar; window.renderSettings=renderSettings;
+window.saveGeminiKey=saveGeminiKey; window.openPhotoOpt=openPhotoOpt; window.applyOptFilters=applyOptFilters; window.drawOptPreview=drawOptPreview; window.aiOptimizePhoto=aiOptimizePhoto; window.checkServerVersion=checkServerVersion; window.renderStats=renderStats; window.searchByPhoto=searchByPhoto; window.loadPsPhoto=loadPsPhoto; window.renderAchievements=renderAchievements; window.renderMap=renderMap; window.openMuseum=openMuseum; window.shareCap=shareCap; window.loadGeminiKey=loadGeminiKey; window.triggerCamera=triggerCamera; window.triggerGallery=triggerGallery; window.renderProfile=renderProfile; window.updateNavAvatar=updateNavAvatar; window.renderSettings=renderSettings;
 window.rotateCrop=rotateCrop; window.rotateCropTo=rotateCropTo; window.resetCrop=resetCrop;
 window.runAI=runAI; window.applyAI=applyAI; window.dismissAI=dismissAI;
