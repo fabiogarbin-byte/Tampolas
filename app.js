@@ -11,7 +11,7 @@ const firebaseConfig = {
   messagingSenderId: "594488372191",
   appId: "1:594488372191:web:83f46233b8c4fffe23f26a"
 };
-const APP_VERSION = 'v3.9';
+const APP_VERSION = 'v4.1';
 const COUNTRY_FLAGS = {
   'brasil': '🇧🇷', 'brazil': '🇧🇷',
   'alemanha': '🇩🇪', 'germany': '🇩🇪',
@@ -68,6 +68,9 @@ const T = { bg:'#141210', card:'#1e1a16', card2:'#252018', border:'#2e2618', tex
 
 // ── State ──
 let caps = [], currentUser = null, unsubCaps = null;
+let listView = 'list'; // 'list' or 'grid'
+let activeFilter = { type: 'all', value: '' };
+let activeSort = 'recent';
 let currentCapId = null, editingId = null, searchQ = '';
 let pendingPhoto = null, pendingPhotoBase64 = null, pendingPhotoMime = null;
 let originalPhotoBase64 = null, originalPhotoMime = null;
@@ -180,15 +183,35 @@ function buildApp() {
 
   <!-- LIST -->
   <div id="scr-list" class="screen" style="display:none;padding-bottom:90px">
-    <div style="padding:52px 16px 14px;display:flex;align-items:center;gap:12px">
+    <div style="padding:52px 16px 10px;display:flex;align-items:center;gap:12px">
       <button data-action="goto-home" style="${btnIconStyle()}">←</button>
       <div style="flex:1"><div style="font-weight:800;font-size:18px">Coleção</div><div id="list-count" style="font-size:11px;color:${T.muted};margin-top:1px"></div></div>
+      <button data-action="search-by-photo" style="background:${T.card};border:1px solid ${T.border};color:${T.text};border-radius:10px;width:36px;height:36px;cursor:pointer;font-size:16px;display:flex;align-items:center;justify-content:center">📷</button>
+      <button data-action="goto-museum-list" style="background:${T.card};border:1px solid ${T.border};color:${T.text};border-radius:10px;width:36px;height:36px;cursor:pointer;font-size:16px;display:flex;align-items:center;justify-content:center">🖼️</button>
+      <button id="btn-view-toggle" data-action="toggle-view" style="background:${T.card};border:1px solid ${T.border};color:${T.text};border-radius:10px;width:36px;height:36px;cursor:pointer;font-size:16px;display:flex;align-items:center;justify-content:center">⊞</button>
     </div>
-    <div style="padding:0 16px 12px;position:relative">
+
+    <!-- Search -->
+    <div style="padding:0 16px 8px;position:relative">
       <span style="position:absolute;left:28px;top:50%;transform:translateY(-50%);color:${T.muted};font-size:16px;pointer-events:none">🔍</span>
       <input id="search-box" placeholder="Buscar nome, marca, cor ou país..." oninput="searchQ=this.value;renderList()"
         style="width:100%;background:${T.card2};border:1.5px solid ${T.border};color:${T.text};border-radius:12px;padding:11px 14px 11px 40px;font-size:15px;outline:none;font-family:inherit;box-sizing:border-box"/>
     </div>
+
+    <!-- Filter chips -->
+    <div style="padding:0 16px 8px;display:flex;gap:6px;overflow-x:auto;scrollbar-width:none">
+      <button data-action="filter-all" style="flex-shrink:0;padding:6px 14px;border-radius:20px;border:1.5px solid #ff8c0055;background:#ff8c0020;color:#ff8c00;font-size:12px;font-weight:700;cursor:pointer;font-family:inherit">Todas</button>
+      <div id="filter-chips" style="display:flex;gap:6px"></div>
+    </div>
+
+    <!-- Sort bar -->
+    <div style="padding:0 16px 10px;display:flex;gap:6px;align-items:center">
+      <span style="font-size:11px;color:${T.muted};font-weight:700;white-space:nowrap">Ordenar:</span>
+      <div style="display:flex;gap:4px;overflow-x:auto;scrollbar-width:none">
+        ${['recent','az','country','brand','rarity'].map(s=>`<button data-sort="${s}" style="flex-shrink:0;padding:5px 10px;border-radius:8px;border:1px solid ${T.border};background:${T.card2};color:${T.muted};font-size:11px;font-weight:700;cursor:pointer;font-family:inherit">${{recent:'🕐 Recente',az:'🔤 A-Z',country:'🌍 País',brand:'🏷️ Marca',rarity:'⭐ Raridade'}[s]}</button>`).join('')}
+      </div>
+    </div>
+
     <div id="list-items"></div>
   </div>
 
@@ -238,7 +261,17 @@ function buildApp() {
       <div><div style="${lblStyle()}">Tipo de bebida</div><input id="f-type" placeholder="Ex: Cerveja, Refrigerante, Suco..." style="${inpStyle()}"/></div>
       <div><div style="${lblStyle()}">Cor</div><input id="f-color" placeholder="Ex: Vermelha, Dourada, Azul..." style="${inpStyle()}"/></div>
       <div><div style="${lblStyle()}">País de origem</div><input id="f-country" placeholder="Ex: Brasil" style="${inpStyle()}"/></div>
-      <div><div style="${lblStyle()}">Notas</div><textarea id="f-notes" placeholder="Raridade, origem, detalhes..." rows="3" style="${inpStyle()};resize:vertical;line-height:1.5"></textarea></div>
+      <div><div style="${lblStyle()}">Notas</div><textarea id="f-notes" placeholder="Origem, detalhes..." rows="3" style="${inpStyle()};resize:vertical;line-height:1.5"></textarea></div>
+
+      <div>
+        <div style="${lblStyle()}">Raridade</div>
+        <select id="f-rarity" style="${inpStyle()};appearance:none;cursor:pointer">
+          <option value="normal">⚪ Normal</option>
+          <option value="rara">🟡 Rara</option>
+          <option value="muito_rara">🟠 Muito Rara</option>
+          <option value="unica">🔴 Única / Especial</option>
+        </select>
+      </div>
 
       <button id="btn-save" style="width:100%;padding:16px;border-radius:14px;border:none;background:linear-gradient(135deg,${O},#c05500);color:#fff;font-weight:800;font-size:16px;cursor:pointer;font-family:inherit;box-shadow:0 6px 20px ${O}40;margin-bottom:8px">SALVAR TAMPOLA</button>
     </div>
@@ -348,6 +381,28 @@ function buildApp() {
   </div>
 
 
+  <!-- PHOTO SEARCH -->
+  <div id="scr-photo-search" class="screen" style="display:none;padding-bottom:90px">
+    <div style="padding:52px 16px 14px;display:flex;align-items:center;gap:12px">
+      <button data-action="goto-list" style="${btnIconStyle()}">←</button>
+      <div><div style="font-weight:800;font-size:18px">Buscar por Foto</div>
+      <div style="font-size:11px;color:${T.muted}">IA compara com sua coleção</div></div>
+    </div>
+    <div style="padding:0 16px;display:flex;flex-direction:column;gap:14px">
+      <div id="ps-thumb" style="width:100%;height:200px;border-radius:16px;border:2px dashed #2e2618;background:#1e1a16;display:flex;align-items:center;justify-content:center;overflow:hidden">
+        <div style="text-align:center;color:#3a3028"><div style="font-size:40px;margin-bottom:8px">📷</div><div style="font-size:13px;color:#7a6a58">Tire ou selecione uma foto</div></div>
+      </div>
+      <div style="display:flex;gap:10px">
+        <button data-action="ps-camera"  style="flex:1;padding:12px;border-radius:12px;border:1px solid #ff8c0055;background:#ff8c0012;color:#ffaa33;font-weight:700;font-size:14px;cursor:pointer;font-family:inherit">📷 Câmera</button>
+        <button data-action="ps-gallery" style="flex:1;padding:12px;border-radius:12px;border:1px solid #2e2618;background:#252018;color:#7a6a58;font-weight:700;font-size:14px;cursor:pointer;font-family:inherit">🖼️ Galeria</button>
+      </div>
+      <input id="ps-cam" type="file" accept="image/*" capture="environment" style="display:none" data-input="ps-cam"/>
+      <input id="ps-gal" type="file" accept="image/*" style="display:none" data-input="ps-gal"/>
+      <button id="ps-btn-search" data-action="ps-search" style="display:none;width:100%;padding:14px;border-radius:14px;border:none;background:linear-gradient(135deg,#7c3aed,#4f46e5);color:#fff;font-weight:800;font-size:15px;cursor:pointer;font-family:inherit">🔍 Buscar na coleção</button>
+      <div id="ps-result" style="display:none"></div>
+    </div>
+  </div>
+
   <!-- STATS DETAIL -->
   <div id="scr-stats" class="screen" style="display:none;padding-bottom:90px">
     <div style="padding:52px 16px 14px;display:flex;align-items:center;gap:12px">
@@ -355,6 +410,35 @@ function buildApp() {
       <div style="font-weight:800;font-size:18px">Estatísticas</div>
     </div>
     <div id="stats-content" style="padding:0 16px;display:flex;flex-direction:column;gap:14px"></div>
+  </div>
+
+
+  <!-- ACHIEVEMENTS -->
+  <div id="scr-achievements" class="screen" style="display:none;padding-bottom:90px">
+    <div style="padding:52px 16px 14px;display:flex;align-items:center;gap:12px">
+      <button data-action="goto-home" style="${btnIconStyle()}">←</button>
+      <div style="font-weight:800;font-size:18px">🏆 Conquistas</div>
+    </div>
+    <div id="achievements-content" style="padding:0 16px"></div>
+  </div>
+
+  <!-- MUSEUM -->
+  <div id="scr-museum" class="screen" style="display:none;padding-bottom:90px;background:#0a0806">
+    <div style="padding:52px 16px 0;display:flex;align-items:center;justify-content:space-between">
+      <button data-action="goto-list" style="${btnIconStyle()}">←</button>
+      <div style="font-size:12px;color:#7a6a58;font-weight:700;letter-spacing:2px">MODO MUSEU</div>
+      <div style="width:38px"></div>
+    </div>
+    <div id="museum-content"></div>
+  </div>
+
+  <!-- MAP -->
+  <div id="scr-map" class="screen" style="display:none;padding-bottom:90px">
+    <div style="padding:52px 16px 14px;display:flex;align-items:center;gap:12px">
+      <button data-action="goto-home" style="${btnIconStyle()}">←</button>
+      <div style="font-weight:800;font-size:18px">🗺️ Mapa da Coleção</div>
+    </div>
+    <div id="map-content" style="padding:0 16px"></div>
   </div>
 
   <!-- NAV -->
@@ -488,6 +572,7 @@ function openEdit(cap) {
   document.getElementById('f-color').value   = cap.color   ||'';
   document.getElementById('f-country').value = cap.country ||'';
   document.getElementById('f-notes').value   = cap.notes   ||'';
+  const rEl=document.getElementById('f-rarity'); if(rEl) rEl.value=cap.rarity||'normal';
   document.getElementById('dup-alert').style.display='none';
   const aiRes=document.getElementById('ai-result'); if(aiRes) aiRes.style.display='none';
   updatePhotoThumb(); goTo('add');
@@ -503,6 +588,7 @@ function getFormValues() {
     color:   (document.getElementById('f-color')?.value   ||'').trim(),
     country: (document.getElementById('f-country')?.value ||'').trim(),
     notes:   (document.getElementById('f-notes')?.value   ||'').trim(),
+    rarity:  document.getElementById('f-rarity')?.value || 'normal',
     photo:   pendingPhoto,
   };
 }
@@ -768,6 +854,18 @@ function renderHome() {
         <div style="position:absolute;right:10px;bottom:8px;font-size:24px;opacity:.12">${x.ic}</div>
       </div>`).join('')}
     </div>
+    <!-- Quick access row -->
+    <div style="display:flex;gap:10px;margin:0 16px 12px;overflow-x:auto;scrollbar-width:none">
+      ${[
+        {a:'goto-achievements', ic:'🏆', l:'Conquistas'},
+        {a:'goto-map',          ic:'🗺️', l:'Mapa'},
+        {a:'goto-stats',        ic:'📊', l:'Stats'},
+      ].map(x=>`<button data-action="${x.a}" style="flex-shrink:0;display:flex;flex-direction:column;align-items:center;gap:4px;padding:12px 16px;border-radius:14px;border:1px solid #2e2618;background:#1e1a16;color:#fff4e8;cursor:pointer;font-family:inherit">
+        <span style="font-size:22px">${x.ic}</span>
+        <span style="font-size:11px;font-weight:700;color:#7a6a58">${x.l}</span>
+      </button>`).join('')}
+    </div>
+
     ${colorList.length?`
     <div style="margin:0 16px 14px;background:${T.card};border-radius:16px;padding:16px;border:1px solid ${T.border}">
       <div style="font-size:11px;font-weight:700;color:${T.muted};letter-spacing:1.5px;text-transform:uppercase;margin-bottom:12px">🎨 Por Cor</div>
@@ -782,25 +880,110 @@ function renderHome() {
 }
 
 // ── Render: List ──
-function renderList() {
-  const el=document.getElementById('list-items'), cnt=document.getElementById('list-count');
+function getFilteredSorted() {
+  const lq = searchQ.toLowerCase();
+  let result = caps.filter(c => {
+    const matchQ = !lq || c.name.toLowerCase().includes(lq) ||
+      (c.brand||'').toLowerCase().includes(lq) ||
+      (c.country||'').toLowerCase().includes(lq) ||
+      (c.color||'').toLowerCase().includes(lq) ||
+      (c.type||'').toLowerCase().includes(lq);
+    let matchF = true;
+    if (activeFilter.type === 'country') matchF = (c.country||'') === activeFilter.value;
+    if (activeFilter.type === 'color')   matchF = (c.color||'')   === activeFilter.value;
+    if (activeFilter.type === 'brand')   matchF = (c.brand||'')   === activeFilter.value;
+    if (activeFilter.type === 'type')    matchF = (c.type||'')    === activeFilter.value;
+    if (activeFilter.type === 'rarity')  matchF = (c.rarity||'normal') === activeFilter.value;
+    return matchQ && matchF;
+  });
+  // Sort
+  if (activeSort === 'az')      result.sort((a,b) => a.name.localeCompare(b.name));
+  if (activeSort === 'country') result.sort((a,b) => (a.country||'').localeCompare(b.country||''));
+  if (activeSort === 'brand')   result.sort((a,b) => (a.brand||'').localeCompare(b.brand||''));
+  if (activeSort === 'rarity') {
+    const order = {unica:0, muito_rara:1, rara:2, normal:3};
+    result.sort((a,b) => (order[a.rarity||'normal']||3) - (order[b.rarity||'normal']||3));
+  }
+  // recent = default (createdAt desc, already ordered from Firebase)
+  return result;
+}
+
+function renderFilterChips() {
+  const el = document.getElementById('filter-chips');
   if (!el) return;
-  const lq=searchQ.toLowerCase();
-  const filtered=caps.filter(c=>!lq||c.name.toLowerCase().includes(lq)||(c.brand||'').toLowerCase().includes(lq)||(c.country||'').toLowerCase().includes(lq)||(c.color||'').toLowerCase().includes(lq));
-  if (cnt) cnt.textContent=`${caps.length} tampola${caps.length!==1?'s':''}`;
-  el.innerHTML=filtered.length===0
-    ?`<div style="text-align:center;padding:64px 24px;color:${T.dim}"><div style="font-size:52px;margin-bottom:14px">${caps.length===0?'🫙':'🔍'}</div><div style="font-size:14px;line-height:1.6">${caps.length===0?'Coleção vazia!<br>Toque em + para começar.':'Nenhuma encontrada.'}</div></div>`
-    :filtered.map(c=>capRowHTML(c)).join('');
+  const filters = [
+    ...[ ...new Set(caps.map(c=>c.country).filter(Boolean)) ].map(v=>({ type:'country', value:v, label: countryFlag(v)+' '+v })),
+    ...[ ...new Set(caps.map(c=>c.type).filter(Boolean))    ].map(v=>({ type:'type',    value:v, label:'🥤 '+v })),
+    ...[ ...new Set(caps.map(c=>c.color).filter(Boolean))   ].map(v=>({ type:'color',   value:v, label:'🎨 '+v })),
+    ...[ ...new Set(caps.map(c=>c.brand).filter(Boolean))   ].map(v=>({ type:'brand',   value:v, label:'🏷️ '+v })),
+  ];
+  el.innerHTML = filters.map(f => {
+    const active = activeFilter.type===f.type && activeFilter.value===f.value;
+    return `<button data-filter-type="${f.type}" data-filter-value="${f.value}"
+      style="flex-shrink:0;padding:6px 14px;border-radius:20px;border:1.5px solid ${active?'#ff8c00':'#2e2618'};background:${active?'#ff8c0020':'#252018'};color:${active?'#ff8c00':'#7a6a58'};font-size:12px;font-weight:700;cursor:pointer;font-family:inherit">${f.label}</button>`;
+  }).join('');
+}
+
+function updateSortButtons() {
+  document.querySelectorAll('[data-sort]').forEach(b => {
+    const active = b.dataset.sort === activeSort;
+    b.style.background = active ? '#ff8c0020' : '#252018';
+    b.style.color       = active ? '#ff8c00'   : '#7a6a58';
+    b.style.borderColor = active ? '#ff8c0055' : '#2e2618';
+  });
+}
+
+function renderList() {
+  const el  = document.getElementById('list-items');
+  const cnt = document.getElementById('list-count');
+  if (!el) return;
+  renderFilterChips();
+  updateSortButtons();
+  const filtered = getFilteredSorted();
+  if (cnt) cnt.textContent = `${caps.length} tampola${caps.length!==1?'s':''}`;
+
+  if (filtered.length === 0) {
+    el.innerHTML = `<div style="text-align:center;padding:64px 24px;color:${T.dim}"><div style="font-size:52px;margin-bottom:14px">${caps.length===0?'🫙':'🔍'}</div><div style="font-size:14px;line-height:1.6">${caps.length===0?'Coleção vazia!<br>Toque em + para começar.':'Nenhuma encontrada.'}</div></div>`;
+    return;
+  }
+
+  if (listView === 'grid') {
+    el.innerHTML = `<div style="display:grid;grid-template-columns:repeat(3,1fr);gap:8px;padding:0 16px">${filtered.map(c => capGridHTML(c)).join('')}</div>`;
+  } else {
+    el.innerHTML = filtered.map(c => capRowHTML(c)).join('');
+  }
+}
+
+function rarityBadge(cap) {
+  const r = cap.rarity || 'normal';
+  if (r === 'normal') return '';
+  const map = { rara:'🟡', muito_rara:'🟠', unica:'🔴' };
+  return `<span style="position:absolute;top:4px;right:4px;font-size:14px">${map[r]||''}</span>`;
+}
+
+function capGridHTML(cap) {
+  const thumb = cap.photo
+    ? `<img src="${cap.photo}" style="width:100%;height:100%;object-fit:cover"/>`
+    : `<div style="width:100%;height:100%;background:${cap.color||'#ff8c00'};display:flex;align-items:center;justify-content:center;font-size:28px">🍺</div>`;
+  return `<div data-action="open-detail" data-id="${cap.id}"
+    style="border-radius:12px;overflow:hidden;cursor:pointer;background:#1e1a16;border:1px solid #2e2618;aspect-ratio:1;position:relative">
+    ${thumb}
+    ${rarityBadge(cap)}
+    <div style="position:absolute;bottom:0;left:0;right:0;background:linear-gradient(transparent,rgba(0,0,0,.85));padding:6px 6px 5px">
+      <div style="font-size:10px;font-weight:700;color:#fff;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${cap.name}</div>
+    </div>
+  </div>`;
 }
 
 function capRowHTML(cap) {
   const thumb=cap.photo
     ?`<div style="width:50px;height:50px;border-radius:50%;overflow:hidden;border:2px solid rgba(255,255,255,.08);flex-shrink:0"><img src="${cap.photo}" style="width:100%;height:100%;object-fit:cover"/></div>`
     :`<div style="width:50px;height:50px;border-radius:50%;background:${O};display:flex;align-items:center;justify-content:center;font-size:22px;border:2px solid rgba(255,255,255,.08);flex-shrink:0">🍺</div>`;
+  const rarityIcon = {rara:'🟡',muito_rara:'🟠',unica:'🔴'}[cap.rarity||''] || '';
   return `<div data-action="open-detail" data-id="${cap.id}" style="display:flex;align-items:center;gap:12px;padding:12px 14px;border-radius:16px;cursor:pointer;margin:0 16px 8px;border:1px solid ${T.border};background:${T.card}">
     ${thumb}
     <div style="flex:1;min-width:0">
-      <div style="font-weight:700;font-size:15px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${cap.name}</div>
+      <div style="font-weight:700;font-size:15px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${cap.name} ${rarityIcon}</div>
       <div style="font-size:12px;color:${T.muted};margin-top:2px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${[cap.brand,cap.type,cap.color].filter(Boolean).join(' · ')||'—'}</div>
     </div>
     <span style="font-size:20px;color:${T.muted};flex-shrink:0">›</span>
@@ -812,7 +995,7 @@ function openDetail(id) { currentCapId=id; renderDetail(id); goTo('detail'); }
 
 function renderDetail(id) {
   const cap=caps.find(c=>c.id===id); if(!cap) return;
-  const fields=[['🏷️ Marca',cap.brand],['🥤 Tipo',cap.type],['🎨 Cor',cap.color],['📍 País',cap.country],['📅 Adicionada',cap.addedAt]].filter(([,v])=>v);
+  const fields=[['🏷️ Marca',cap.brand],['🥤 Tipo',cap.type],['🎨 Cor',cap.color],['📍 País',cap.country],['⭐ Raridade',{normal:'⚪ Normal',rara:'🟡 Rara',muito_rara:'🟠 Muito Rara',unica:'🔴 Única'}[cap.rarity||'normal']],['📅 Adicionada',cap.addedAt]].filter(([,v])=>v);
   const el=document.getElementById('scr-detail'); if(!el) return;
   el.innerHTML=`
     <div style="position:relative;height:280px;overflow:hidden">
@@ -829,6 +1012,10 @@ function renderDetail(id) {
         ${fields.map(([l,v])=>`<div style="background:${T.card};border-radius:14px;padding:14px;border:1px solid ${T.border}"><div style="font-size:11px;color:${T.muted};font-weight:600;margin-bottom:5px">${l}</div><div style="font-weight:700;font-size:15px">${v}</div></div>`).join('')}
       </div>
       ${cap.notes?`<div style="background:${T.card};border-radius:14px;padding:14px 16px;border:1px solid ${T.border};margin-bottom:12px"><div style="font-size:11px;color:${T.muted};font-weight:600;margin-bottom:6px">📝 Notas</div><div style="font-size:14px;color:#c0a888;line-height:1.6">${cap.notes}</div></div>`:''}
+      <div style="display:flex;gap:10px;margin-bottom:10px">
+        <button data-action="share-cap" data-id="${cap.id}" style="flex:1;padding:13px;border-radius:14px;border:1px solid #ff8c0044;background:#ff8c0012;color:#ffaa33;font-weight:700;font-size:14px;cursor:pointer;font-family:inherit">📤 Compartilhar</button>
+        <button data-action="museum-from-detail" data-id="${cap.id}" style="flex:1;padding:13px;border-radius:14px;border:1px solid #2e2618;background:#1e1a16;color:#7a6a58;font-weight:700;font-size:14px;cursor:pointer;font-family:inherit">🖼️ Museu</button>
+      </div>
       <div style="display:flex;gap:10px">
         <button data-action="edit-cap" data-id="${cap.id}" style="flex:1;padding:14px;border-radius:14px;border:1px solid ${T.border};background:${T.card};color:${T.text};font-weight:700;font-size:14px;cursor:pointer;font-family:inherit">✏️ Editar</button>
         <button data-action="delete-cap" data-id="${cap.id}" style="padding:14px 18px;border-radius:14px;border:1px solid #401010;background:#200505;color:#ef4444;font-weight:700;font-size:14px;cursor:pointer;font-family:inherit">🗑</button>
@@ -880,6 +1067,70 @@ async function checkServerVersion() {
   } catch(e) {
     if (elServer) { elServer.textContent = 'erro'; }
     showToast('Erro ao verificar versão.', 'err');
+  }
+}
+
+let psPhotoBase64 = null, psPhotoMime = null;
+
+function loadPsPhoto(file) {
+  if (!file) return;
+  const mime = file.type || 'image/jpeg';
+  const r = new FileReader();
+  r.onload = e => {
+    psPhotoBase64 = e.target.result.split(',')[1];
+    psPhotoMime   = mime;
+    const thumb = document.getElementById('ps-thumb');
+    if (thumb) thumb.innerHTML = `<img src="${e.target.result}" style="width:100%;height:100%;object-fit:cover"/>`;
+    const btn = document.getElementById('ps-btn-search');
+    if (btn) btn.style.display = 'block';
+  };
+  r.readAsDataURL(file);
+}
+
+async function searchByPhoto() {
+  if (!psPhotoBase64) return;
+  GEMINI_KEY = localStorage.getItem(GEMINI_KEY_STORAGE) || '';
+  if (!GEMINI_KEY) { showToast('Configure a chave Gemini em 👤 Perfil', 'err'); return; }
+  const btn = document.getElementById('ps-btn-search');
+  const resEl = document.getElementById('ps-result');
+  if (btn) { btn.textContent = '⟳ Analisando...'; btn.disabled = true; }
+  try {
+    const result = await analyzePhotoWithAI(psPhotoBase64, psPhotoMime);
+    // compare with collection
+    const name  = (result.name  || '').toLowerCase();
+    const brand = (result.brand || '').toLowerCase();
+    const matches = caps.filter(c => {
+      const cn = c.name.toLowerCase(), cb = (c.brand||'').toLowerCase();
+      return (name && (cn.includes(name.split(' ')[0]) || name.includes(cn.split(' ')[0])))
+          || (brand && brand.length > 2 && cb.includes(brand));
+    });
+    if (resEl) {
+      if (matches.length > 0) {
+        resEl.style.display = 'block';
+        resEl.innerHTML = `
+          <div style="background:#052010;border:1.5px solid #0a4020;border-radius:14px;padding:16px">
+            <div style="font-size:13px;font-weight:800;color:#22c55e;margin-bottom:12px">✅ Encontrada na coleção!</div>
+            ${matches.map(c => `<div data-action="open-detail" data-id="${c.id}"
+              style="display:flex;align-items:center;gap:10px;padding:10px;background:#0a2010;border-radius:10px;cursor:pointer;margin-bottom:6px">
+              ${c.photo ? `<img src="${c.photo}" style="width:40px;height:40px;border-radius:50%;object-fit:cover;flex-shrink:0"/>` : `<div style="width:40px;height:40px;border-radius:50%;background:${c.color||'#ff8c00'};display:flex;align-items:center;justify-content:center;font-size:18px;flex-shrink:0">🍺</div>`}
+              <div><div style="font-weight:700;font-size:14px">${c.name}</div><div style="font-size:12px;color:#7a6a58">${c.brand||''}</div></div>
+            </div>`).join('')}
+          </div>`;
+      } else {
+        resEl.style.display = 'block';
+        resEl.innerHTML = `
+          <div style="background:#200505;border:1.5px solid #401010;border-radius:14px;padding:16px;text-align:center">
+            <div style="font-size:32px;margin-bottom:8px">❌</div>
+            <div style="font-weight:800;color:#ef4444;margin-bottom:4px">Não encontrada!</div>
+            <div style="font-size:13px;color:#7a6a58">A IA identificou: <b style="color:#fff4e8">${result.name||'?'}</b></div>
+            <div style="font-size:12px;color:#7a6a58;margin-top:4px">Esta tampola não está na sua coleção.</div>
+          </div>`;
+      }
+    }
+  } catch(e) {
+    showToast('Erro ao analisar: ' + e.message, 'err');
+  } finally {
+    if (btn) { btn.textContent = '🔍 Buscar na coleção'; btn.disabled = false; }
   }
 }
 
@@ -948,6 +1199,285 @@ function renderStats() {
     section('Tipo de bebida', '🥤', types.map(([k,v]) =>
       barRow(k, v, caps.length)).join('')),
   ].join('');
+}
+
+
+// ── Conquistas ──
+const ACHIEVEMENTS = [
+  { id:'first',       icon:'🍺', title:'Primeira Tampola',      desc:'Cadastrou sua primeira tampola',              check: c => c.length >= 1 },
+  { id:'ten',         icon:'🔟', title:'10 Tampolas',           desc:'10 tampolas na coleção',                      check: c => c.length >= 10 },
+  { id:'fifty',       icon:'5️⃣0️⃣', title:'50 Tampolas',          desc:'50 tampolas na coleção',                      check: c => c.length >= 50 },
+  { id:'hundred',     icon:'💯', title:'100 Tampolas',          desc:'100 tampolas na coleção',                     check: c => c.length >= 100 },
+  { id:'countries3',  icon:'🌍', title:'3 Países',              desc:'Tampolas de 3 países diferentes',             check: c => new Set(c.map(x=>x.country).filter(Boolean)).size >= 3 },
+  { id:'countries10', icon:'🗺️', title:'10 Países',             desc:'Tampolas de 10 países diferentes',            check: c => new Set(c.map(x=>x.country).filter(Boolean)).size >= 10 },
+  { id:'continents',  icon:'🌐', title:'Todos os Continentes',  desc:'Tampolas dos 6 continentes',                  check: c => {
+    const eu=['alemanha','bélgica','dinamarca','espanha','frança','holanda','irlanda','itália','noruega','portugal','reino unido','rússia','suécia','suíça','república tcheca','escócia'];
+    const am=['argentina','brasil','canadá','chile','colômbia','cuba','eua','estados unidos','jamaica','méxico','peru','uruguai'];
+    const as=['china','coreia','japão','tailândia'];
+    const af=['áfrica do sul'];
+    const oc=['austrália'];
+    const countries = c.map(x=>(x.country||'').toLowerCase());
+    return [eu,am,as,af,oc].every(cont => cont.some(p => countries.includes(p)));
+  }},
+  { id:'brands5',     icon:'🏷️', title:'5 Marcas',              desc:'Tampolas de 5 marcas diferentes',             check: c => new Set(c.map(x=>x.brand).filter(Boolean)).size >= 5 },
+  { id:'brands20',    icon:'🏪', title:'20 Marcas',             desc:'Tampolas de 20 marcas diferentes',            check: c => new Set(c.map(x=>x.brand).filter(Boolean)).size >= 20 },
+  { id:'rare',        icon:'🟡', title:'Caçador de Raras',      desc:'Tem uma tampola rara',                        check: c => c.some(x=>x.rarity==='rara'||x.rarity==='muito_rara'||x.rarity==='unica') },
+  { id:'unique',      icon:'🔴', title:'Peça Única',            desc:'Tem uma tampola única/especial',              check: c => c.some(x=>x.rarity==='unica') },
+  { id:'photo',       icon:'📸', title:'Fotógrafo',             desc:'Tem 10 tampolas com foto',                    check: c => c.filter(x=>x.photo).length >= 10 },
+  { id:'types3',      icon:'🥤', title:'Diversidade',           desc:'3 tipos de bebida diferentes',                check: c => new Set(c.map(x=>x.type).filter(Boolean)).size >= 3 },
+  { id:'brazil10',    icon:'🇧🇷', title:'Orgulho Brasileiro',   desc:'10 tampolas do Brasil',                       check: c => c.filter(x=>(x.country||'').toLowerCase()==='brasil').length >= 10 },
+];
+
+function getUnlockedAchievements() {
+  return ACHIEVEMENTS.map(a => ({ ...a, unlocked: a.check(caps) }));
+}
+
+function renderAchievements() {
+  const el = document.getElementById('achievements-content');
+  if (!el) return;
+  const list = getUnlockedAchievements();
+  const unlocked = list.filter(a=>a.unlocked).length;
+  el.innerHTML = `
+    <div style="text-align:center;padding:16px;background:#1e1a16;border-radius:16px;border:1px solid #2e2618;margin-bottom:14px">
+      <div style="font-size:36px;font-weight:900;color:#ffaa33">${unlocked}/${list.length}</div>
+      <div style="font-size:12px;color:#7a6a58;margin-top:2px">conquistas desbloqueadas</div>
+      <div style="height:6px;background:#252018;border-radius:6px;overflow:hidden;margin-top:8px">
+        <div style="height:100%;width:${Math.round(unlocked/list.length*100)}%;background:linear-gradient(90deg,#ff8c00,#ffaa33);border-radius:6px"></div>
+      </div>
+    </div>
+    ${list.map(a => `
+    <div style="display:flex;align-items:center;gap:12px;padding:14px;background:${a.unlocked?'#1e1a16':'#141210'};border-radius:14px;border:1px solid ${a.unlocked?'#ff8c0044':'#2e2618'};margin-bottom:8px;opacity:${a.unlocked?1:0.5}">
+      <div style="font-size:32px;flex-shrink:0">${a.icon}</div>
+      <div style="flex:1">
+        <div style="font-weight:700;font-size:14px;color:${a.unlocked?'#fff4e8':'#7a6a58'}">${a.title} ${a.unlocked?'✅':''}</div>
+        <div style="font-size:12px;color:#7a6a58;margin-top:2px">${a.desc}</div>
+      </div>
+    </div>`).join('')}`;
+}
+
+
+// ── Modo Museu ──
+let museumIndex = 0;
+
+function openMuseum(startId) {
+  const filtered = getFilteredSorted();
+  museumIndex = filtered.findIndex(c => c.id === startId);
+  if (museumIndex < 0) museumIndex = 0;
+  renderMuseum();
+  goTo('museum');
+}
+
+function renderMuseum() {
+  const filtered = getFilteredSorted();
+  if (!filtered.length) return;
+  museumIndex = Math.max(0, Math.min(museumIndex, filtered.length-1));
+  const cap = filtered[museumIndex];
+  const el = document.getElementById('museum-content');
+  if (!el) return;
+  const rarityMap = {normal:'',rara:'🟡 Rara',muito_rara:'🟠 Muito Rara',unica:'🔴 Única'};
+  el.innerHTML = `
+    <div style="display:flex;flex-direction:column;align-items:center;justify-content:center;min-height:calc(100vh - 100px);padding:20px">
+      <div style="font-size:11px;color:#7a6a58;margin-bottom:20px;letter-spacing:2px">${museumIndex+1} / ${filtered.length}</div>
+      <div style="width:240px;height:240px;border-radius:50%;overflow:hidden;border:4px solid #ff8c0044;box-shadow:0 0 60px #ff8c0033;margin-bottom:28px">
+        ${cap.photo
+          ? `<img src="${cap.photo}" style="width:100%;height:100%;object-fit:cover"/>`
+          : `<div style="width:100%;height:100%;background:${cap.color||'#ff8c00'};display:flex;align-items:center;justify-content:center;font-size:80px">🍺</div>`}
+      </div>
+      <div style="font-size:24px;font-weight:900;text-align:center;margin-bottom:6px">${cap.name}</div>
+      ${cap.brand?`<div style="font-size:15px;color:#7a6a58;margin-bottom:4px">${cap.brand}</div>`:''}
+      ${cap.type?`<div style="font-size:13px;color:#ffaa33;margin-bottom:4px">🥤 ${cap.type}</div>`:''}
+      <div style="display:flex;gap:12px;margin-top:8px;flex-wrap:wrap;justify-content:center">
+        ${cap.country?`<span style="font-size:13px">${countryFlag(cap.country)} ${cap.country}</span>`:''}
+        ${cap.color?`<span style="font-size:13px">🎨 ${cap.color}</span>`:''}
+        ${cap.rarity&&cap.rarity!=='normal'?`<span style="font-size:13px">${rarityMap[cap.rarity]}</span>`:''}
+      </div>
+      ${cap.notes?`<div style="margin-top:16px;font-size:13px;color:#7a6a58;text-align:center;font-style:italic;max-width:280px">${cap.notes}</div>`:''}
+      <div style="display:flex;gap:20px;margin-top:32px">
+        <button data-action="museum-prev" style="width:56px;height:56px;border-radius:50%;border:1.5px solid #2e2618;background:#1e1a16;color:#fff4e8;font-size:22px;cursor:pointer;font-family:inherit">←</button>
+        <button data-action="museum-edit" data-id="${cap.id}" style="width:56px;height:56px;border-radius:50%;border:1.5px solid #ff8c0044;background:#ff8c0012;color:#ffaa33;font-size:18px;cursor:pointer;font-family:inherit">✏️</button>
+        <button data-action="museum-next" style="width:56px;height:56px;border-radius:50%;border:1.5px solid #2e2618;background:#1e1a16;color:#fff4e8;font-size:22px;cursor:pointer;font-family:inherit">→</button>
+      </div>
+    </div>`;
+}
+
+
+// ── Mapa Mundi ──
+const COUNTRY_COORDS = {
+  'brasil':[-14,-51],'brazil':[-14,-51],
+  'alemanha':[51,10],'germany':[51,10],
+  'estados unidos':[38,-97],'eua':[38,-97],'usa':[38,-97],
+  'holanda':[52,5],'netherlands':[52,5],
+  'méxico':[-23,-102],'mexico':[23,-102],
+  'argentina':[-34,-64],
+  'portugal':[39,-8],
+  'espanha':[40,-4],'spain':[40,-4],
+  'itália':[42,12],'italy':[42,12],
+  'bélgica':[50,4],'belgium':[50,4],
+  'irlanda':[53,-8],'ireland':[53,-8],
+  'reino unido':[55,-3],'uk':[55,-3],
+  'japão':[36,138],'japan':[36,138],
+  'china':[35,105],
+  'austrália':[-25,133],'australia':[-25,133],
+  'canadá':[56,-106],'canada':[56,-106],
+  'rússia':[60,100],'russia':[60,100],
+  'dinamarca':[56,10],'denmark':[56,10],
+  'suécia':[62,15],'sweden':[62,15],
+  'noruega':[65,13],'norway':[65,13],
+  'república tcheca':[50,15],'czech':[50,15],
+  'colômbia':[4,-72],'colombia':[4,-72],
+  'chile':[-30,-71],
+  'peru':[-10,-76],
+  'uruguai':[-33,-56],'uruguay':[-33,-56],
+  'áfrica do sul':[-29,25],'south africa':[-29,25],
+  'coreia':[37,127],'korea':[37,127],
+  'tailândia':[15,101],'thailand':[15,101],
+  'cuba':[22,-80],
+  'jamaica':[18,-77],
+  'escócia':[57,-4],'scotland':[57,-4],
+  'frança':[46,2],'france':[46,2],
+  'suíça':[47,8],'switzerland':[47,8],
+};
+
+function renderMap() {
+  const el = document.getElementById('map-content');
+  if (!el) return;
+
+  // get countries with counts
+  const countryMap = {};
+  caps.forEach(c => {
+    const k = (c.country||'').trim().toLowerCase();
+    if (k) countryMap[k] = (countryMap[k]||0) + 1;
+  });
+
+  const hasCountry = Object.keys(countryMap).length > 0;
+
+  // SVG world map (simplified mercator projection)
+  // Convert lat/lng to x,y in a 800x400 SVG
+  function toXY(lat, lng) {
+    const x = (lng + 180) * (800/360);
+    const y = (90 - lat) * (400/180);
+    return [x, y];
+  }
+
+  const dots = Object.entries(countryMap).map(([country, count]) => {
+    const coords = COUNTRY_COORDS[country];
+    if (!coords) return '';
+    const [x, y] = toXY(coords[0], coords[1]);
+    const r = Math.min(6 + count * 2, 16);
+    const flag = countryFlag(country);
+    return `<g>
+      <circle cx="${x}" cy="${y}" r="${r+4}" fill="#ff8c00" opacity="0.2"/>
+      <circle cx="${x}" cy="${y}" r="${r}" fill="#ff8c00" opacity="0.9"/>
+      <text x="${x}" y="${y+4}" text-anchor="middle" font-size="10" fill="white" font-weight="bold">${count}</text>
+    </g>`;
+  }).join('');
+
+  const countries = Object.entries(countryMap).sort((a,b)=>b[1]-a[1]);
+
+  el.innerHTML = `
+    <div style="background:#1e1a16;border-radius:16px;overflow:hidden;border:1px solid #2e2618;margin-bottom:14px">
+      <svg viewBox="0 0 800 400" style="width:100%;display:block;background:#0d1117">
+        <!-- Simple world outline dots -->
+        <text x="400" y="200" text-anchor="middle" font-size="120" opacity="0.04" fill="#fff4e8">🌍</text>
+        <!-- Grid lines -->
+        <line x1="0" y1="200" x2="800" y2="200" stroke="#2e2618" stroke-width="0.5"/>
+        <line x1="400" y1="0" x2="400" y2="400" stroke="#2e2618" stroke-width="0.5"/>
+        <!-- Country dots -->
+        ${dots}
+      </svg>
+    </div>
+    <div style="background:#1e1a16;border-radius:16px;padding:16px;border:1px solid #2e2618">
+      <div style="font-size:13px;font-weight:700;color:#7a6a58;letter-spacing:1px;text-transform:uppercase;margin-bottom:12px">Países na coleção</div>
+      ${hasCountry
+        ? countries.map(([c,n]) => `<div style="display:flex;justify-content:space-between;align-items:center;padding:8px 0;border-bottom:1px solid #252018">
+            <span style="font-size:14px">${countryFlag(c)} ${c.charAt(0).toUpperCase()+c.slice(1)}</span>
+            <span style="font-size:13px;font-weight:700;color:#ffaa33">${n} tampola${n>1?'s':''}</span>
+          </div>`).join('')
+        : '<div style="text-align:center;color:#3a3028;padding:20px">Nenhum país cadastrado ainda</div>'
+      }
+    </div>`;
+}
+
+
+// ── Compartilhar ──
+async function shareCap(cap) {
+  // Generate share card as canvas
+  const canvas = document.createElement('canvas');
+  canvas.width = 600; canvas.height = 600;
+  const ctx = canvas.getContext('2d');
+
+  // Background
+  ctx.fillStyle = '#141210';
+  ctx.fillRect(0, 0, 600, 600);
+
+  // Orange circle bg
+  ctx.fillStyle = '#ff8c0015';
+  ctx.beginPath(); ctx.arc(300, 220, 200, 0, Math.PI*2); ctx.fill();
+
+  // Photo or emoji
+  if (cap.photo) {
+    await new Promise(res => {
+      const img = new Image();
+      img.onload = () => {
+        ctx.save();
+        ctx.beginPath(); ctx.arc(300, 220, 160, 0, Math.PI*2); ctx.clip();
+        ctx.drawImage(img, 140, 60, 320, 320);
+        ctx.restore(); res();
+      };
+      img.src = cap.photo;
+    });
+  } else {
+    ctx.font = '120px serif';
+    ctx.textAlign = 'center';
+    ctx.fillText('🍺', 300, 270);
+  }
+
+  // Circle border
+  ctx.strokeStyle = '#ff8c00';
+  ctx.lineWidth = 4;
+  ctx.beginPath(); ctx.arc(300, 220, 160, 0, Math.PI*2); ctx.stroke();
+
+  // Name
+  ctx.fillStyle = '#fff4e8';
+  ctx.font = 'bold 28px system-ui';
+  ctx.textAlign = 'center';
+  ctx.fillText(cap.name, 300, 430);
+
+  // Brand + country
+  ctx.fillStyle = '#7a6a58';
+  ctx.font = '18px system-ui';
+  const sub = [cap.brand, cap.type, cap.country ? countryFlag(cap.country.toLowerCase())+' '+cap.country : ''].filter(Boolean).join(' · ');
+  ctx.fillText(sub, 300, 462);
+
+  // Rarity
+  if (cap.rarity && cap.rarity !== 'normal') {
+    const rMap = {rara:'🟡 Rara', muito_rara:'🟠 Muito Rara', unica:'🔴 Única'};
+    ctx.font = '16px system-ui';
+    ctx.fillStyle = '#ffaa33';
+    ctx.fillText(rMap[cap.rarity]||'', 300, 492);
+  }
+
+  // Watermark
+  ctx.fillStyle = '#3a3028';
+  ctx.font = '14px system-ui';
+  ctx.fillText('Tampolas App', 300, 570);
+
+  // Share or download
+  const dataUrl = canvas.toDataURL('image/png');
+  if (navigator.share && navigator.canShare) {
+    try {
+      const blob = await (await fetch(dataUrl)).blob();
+      const file = new File([blob], cap.name+'.png', { type:'image/png' });
+      if (navigator.canShare({ files:[file] })) {
+        await navigator.share({ files:[file], title:cap.name, text:'Olha essa tampola da minha coleção!' });
+        return;
+      }
+    } catch(e) {}
+  }
+  // Fallback: download
+  const a = document.createElement('a');
+  a.href = dataUrl; a.download = cap.name+'.png'; a.click();
+  showToast('Imagem salva!', 'ok');
 }
 
 function renderProfile() {
@@ -1020,7 +1550,37 @@ document.addEventListener('click', function(e) {
   }
   if (action === 'delete-cap' && dataId) { deleteCap(dataId); return; }
 
-  if (action === 'goto-stats')   { goTo('stats'); renderStats(); return; }
+  if (action === 'goto-stats')    { goTo('stats'); renderStats(); return; }
+  if (action === 'goto-achievements') { goTo('achievements'); renderAchievements(); return; }
+  if (action === 'goto-map')         { goTo('map'); renderMap(); return; }
+  if (action === 'goto-museum-list') { museumIndex=0; renderMuseum(); goTo('museum'); return; }
+  if (action === 'museum-prev')      { museumIndex--; renderMuseum(); return; }
+  if (action === 'museum-next')      { museumIndex++; renderMuseum(); return; }
+  if (action === 'museum-edit')      { if(dataId){ const c=caps.find(x=>x.id===dataId); if(c) openEdit(c); } return; }
+  if (action === 'museum-from-detail'){ if(dataId){ openMuseum(dataId); } return; }
+  if (action === 'share-cap')        { if(dataId){ const c=caps.find(x=>x.id===dataId); if(c) shareCap(c); } return; }
+  if (action === 'search-by-photo') { psPhotoBase64=null; psPhotoMime=null; const t=document.getElementById('ps-thumb'); if(t) t.innerHTML='<div style="text-align:center;color:#3a3028"><div style="font-size:40px;margin-bottom:8px">📷</div><div style="font-size:13px;color:#7a6a58">Tire ou selecione uma foto</div></div>'; const b=document.getElementById('ps-btn-search'); if(b){b.style.display='none';b.disabled=false;} const r=document.getElementById('ps-result'); if(r)r.style.display='none'; goTo('photo-search'); return; }
+  if (action === 'ps-camera')  { const el=document.getElementById('ps-cam'); if(el){el.value='';el.click();} return; }
+  if (action === 'ps-gallery') { const el=document.getElementById('ps-gal'); if(el){el.value='';el.click();} return; }
+  if (action === 'ps-search')  { searchByPhoto(); return; }
+  if (action === 'toggle-view')  {
+    listView = listView === 'list' ? 'grid' : 'list';
+    const btn = document.getElementById('btn-view-toggle');
+    if (btn) btn.textContent = listView === 'grid' ? '☰' : '⊞';
+    renderList(); return;
+  }
+  if (action === 'filter-all') { activeFilter = {type:'all',value:''}; renderList(); return; }
+  // filter chip
+  const fType = el.dataset.filterType, fVal = el.dataset.filterValue;
+  if (fType && fVal) {
+    activeFilter = activeFilter.type===fType && activeFilter.value===fVal
+      ? {type:'all',value:''}
+      : {type:fType, value:fVal};
+    renderList(); return;
+  }
+  // sort
+  const sortVal = el.dataset.sort;
+  if (sortVal) { activeSort = sortVal; renderList(); return; }
   if (action === 'check-version') { checkServerVersion(); return; }
 
   // Handle id-based buttons
@@ -1035,6 +1595,11 @@ document.addEventListener('click', function(e) {
 });
 
 // Slider input delegation
+document.addEventListener('change', function(e) {
+  const inp = e.target.dataset.input;
+  if (inp === 'ps-cam' || inp === 'ps-gal') { loadPsPhoto(e.target.files[0]); e.target.value=''; }
+});
+
 document.addEventListener('input', function(e) {
   const action = e.target.dataset.action;
   if (action === 'zoom-change')   { cropScale = parseFloat(e.target.value); drawCrop(); }
@@ -1058,6 +1623,6 @@ window.checkDuplicate=checkDuplicate; window.loadPhoto=loadPhoto;
 window.openCrop=openCrop; window.confirmCrop=confirmCrop; window.drawCrop=drawCrop;
 window.cropDown=cropDown; window.cropMove=cropMove; window.cropUp=cropUp;
 window.updatePhotoThumb=updatePhotoThumb; window.renderList=renderList;
-window.saveGeminiKey=saveGeminiKey; window.checkServerVersion=checkServerVersion; window.renderStats=renderStats; window.loadGeminiKey=loadGeminiKey; window.triggerCamera=triggerCamera; window.triggerGallery=triggerGallery; window.renderProfile=renderProfile; window.updateNavAvatar=updateNavAvatar; window.renderSettings=renderSettings;
+window.saveGeminiKey=saveGeminiKey; window.checkServerVersion=checkServerVersion; window.renderStats=renderStats; window.searchByPhoto=searchByPhoto; window.loadPsPhoto=loadPsPhoto; window.renderAchievements=renderAchievements; window.renderMap=renderMap; window.openMuseum=openMuseum; window.shareCap=shareCap; window.loadGeminiKey=loadGeminiKey; window.triggerCamera=triggerCamera; window.triggerGallery=triggerGallery; window.renderProfile=renderProfile; window.updateNavAvatar=updateNavAvatar; window.renderSettings=renderSettings;
 window.rotateCrop=rotateCrop; window.rotateCropTo=rotateCropTo; window.resetCrop=resetCrop;
 window.runAI=runAI; window.applyAI=applyAI; window.dismissAI=dismissAI;
