@@ -11,7 +11,7 @@ const firebaseConfig = {
   messagingSenderId: "594488372191",
   appId: "1:594488372191:web:83f46233b8c4fffe23f26a"
 };
-const APP_VERSION = 'v4.6';
+const APP_VERSION = 'v4.7';
 const COUNTRY_FLAGS = {
   'brasil': '🇧🇷', 'brazil': '🇧🇷',
   'alemanha': '🇩🇪', 'germany': '🇩🇪',
@@ -423,13 +423,15 @@ function buildApp() {
   </div>
 
   <!-- MUSEUM -->
-  <div id="scr-museum" class="screen" style="display:none;padding-bottom:90px;background:#0a0806">
-    <div style="padding:52px 16px 0;display:flex;align-items:center;justify-content:space-between">
+  <div id="scr-museum" class="screen" style="display:none;background:#0a0806;height:100vh;overflow:hidden">
+    <div style="position:fixed;top:0;left:0;right:0;z-index:10;padding:max(52px,16px) 16px 12px;display:flex;align-items:center;justify-content:space-between;background:linear-gradient(to bottom,rgba(10,8,6,.9),transparent)">
       <button data-action="goto-list" style="${btnIconStyle()}">←</button>
       <div style="font-size:12px;color:#7a6a58;font-weight:700;letter-spacing:2px">MODO MUSEU</div>
       <div style="width:38px"></div>
     </div>
-    <div id="museum-content"></div>
+    <div id="museum-scroll" style="height:100vh;overflow-y:auto;scroll-snap-type:y mandatory;scrollbar-width:none">
+      <div id="museum-content"></div>
+    </div>
   </div>
 
   <!-- MAP -->
@@ -1045,9 +1047,7 @@ function renderDetail(id) {
   el.innerHTML=`
     <div style="position:relative;height:280px;overflow:hidden">
       ${cap.photo
-        ?`<div data-action="expand-photo" data-src="${cap.photo}" style="width:100%;height:100%;cursor:zoom-in">
-            <img src="${cap.photo}" style="width:100%;height:100%;object-fit:cover;pointer-events:none"/>
-          </div>`
+        ?`<img src="${cap.photo}" onclick="openLightbox('${cap.photo.replace(/'/g,'&#39;')}')" style="width:100%;height:100%;object-fit:cover;cursor:zoom-in"/>`
         :`<div style="width:100%;height:100%;background:linear-gradient(160deg,${O}55,${T.bg});display:flex;align-items:center;justify-content:center;font-size:110px">🍺</div>`}
       <div style="position:absolute;inset:0;background:linear-gradient(to bottom,rgba(0,0,0,.15),rgba(20,18,16,.97))"></div>
       <button data-action="goto-list" style="position:absolute;top:52px;left:16px;background:rgba(0,0,0,.45);border:1px solid rgba(255,255,255,.1);color:${T.text};border-radius:10px;padding:8px 12px;cursor:pointer;font-size:18px">←</button>
@@ -1340,33 +1340,36 @@ function renderMuseum() {
   const filtered = getFilteredSorted();
   if (!filtered.length) return;
   museumIndex = Math.max(0, Math.min(museumIndex, filtered.length-1));
-  const cap = filtered[museumIndex];
   const el = document.getElementById('museum-content');
   if (!el) return;
   const rarityMap = {normal:'',rara:'🟡 Rara',muito_rara:'🟠 Muito Rara',unica:'🔴 Única'};
-  el.innerHTML = `
-    <div style="display:flex;flex-direction:column;align-items:center;justify-content:center;min-height:calc(100vh - 100px);padding:20px">
-      <div style="font-size:11px;color:#7a6a58;margin-bottom:20px;letter-spacing:2px">${museumIndex+1} / ${filtered.length}</div>
-      <div style="width:240px;height:240px;border-radius:50%;overflow:hidden;border:4px solid #ff8c0044;box-shadow:0 0 60px #ff8c0033;margin-bottom:28px">
+
+  el.innerHTML = filtered.map((cap, i) => `
+    <div style="height:100vh;scroll-snap-align:start;display:flex;flex-direction:column;align-items:center;justify-content:center;padding:80px 24px 40px;box-sizing:border-box">
+      <div style="font-size:11px;color:#7a6a58;margin-bottom:20px;letter-spacing:2px">${i+1} / ${filtered.length}</div>
+      <div onclick="openLightbox('${(cap.photo||'').replace(/'/g,'&#39;')}')"
+        style="width:220px;height:220px;border-radius:50%;overflow:hidden;border:4px solid #ff8c0044;box-shadow:0 0 60px #ff8c0033;margin-bottom:24px;cursor:${cap.photo?'zoom-in':'default'}">
         ${cap.photo
-          ? `<div data-action="expand-photo" data-src="${cap.photo}" style="width:100%;height:100%;cursor:zoom-in"><img src="${cap.photo}" style="width:100%;height:100%;object-fit:cover;pointer-events:none"/></div>`
+          ? `<img src="${cap.photo}" style="width:100%;height:100%;object-fit:cover"/>`
           : `<div style="width:100%;height:100%;background:${cap.color||'#ff8c00'};display:flex;align-items:center;justify-content:center;font-size:80px">🍺</div>`}
       </div>
-      <div style="font-size:24px;font-weight:900;text-align:center;margin-bottom:6px">${cap.name}</div>
+      <div style="font-size:24px;font-weight:900;text-align:center;margin-bottom:6px;color:#fff4e8">${cap.name}</div>
       ${cap.brand?`<div style="font-size:15px;color:#7a6a58;margin-bottom:4px">${cap.brand}</div>`:''}
-      ${cap.type?`<div style="font-size:13px;color:#ffaa33;margin-bottom:4px">🥤 ${cap.type}</div>`:''}
-      <div style="display:flex;gap:12px;margin-top:8px;flex-wrap:wrap;justify-content:center">
-        ${cap.country?`<span style="font-size:13px">${countryFlag(cap.country)} ${cap.country}</span>`:''}
-        ${cap.color?`<span style="font-size:13px">🎨 ${cap.color}</span>`:''}
+      ${cap.type?`<div style="font-size:13px;color:#ffaa33;margin-bottom:8px">🥤 ${cap.type}</div>`:''}
+      <div style="display:flex;gap:12px;flex-wrap:wrap;justify-content:center;margin-bottom:8px">
+        ${cap.country?`<span style="font-size:13px;color:#fff4e8">${countryFlag(cap.country)} ${cap.country}</span>`:''}
+        ${cap.color?`<span style="font-size:13px;color:#fff4e8">🎨 ${cap.color}</span>`:''}
         ${cap.rarity&&cap.rarity!=='normal'?`<span style="font-size:13px">${rarityMap[cap.rarity]}</span>`:''}
       </div>
-      ${cap.notes?`<div style="margin-top:16px;font-size:13px;color:#7a6a58;text-align:center;font-style:italic;max-width:280px">${cap.notes}</div>`:''}
-      <div style="display:flex;gap:20px;margin-top:32px">
-        <button data-action="museum-prev" style="width:56px;height:56px;border-radius:50%;border:1.5px solid #2e2618;background:#1e1a16;color:#fff4e8;font-size:22px;cursor:pointer;font-family:inherit">←</button>
-        <button data-action="museum-edit" data-id="${cap.id}" style="width:56px;height:56px;border-radius:50%;border:1.5px solid #ff8c0044;background:#ff8c0012;color:#ffaa33;font-size:18px;cursor:pointer;font-family:inherit">✏️</button>
-        <button data-action="museum-next" style="width:56px;height:56px;border-radius:50%;border:1.5px solid #2e2618;background:#1e1a16;color:#fff4e8;font-size:22px;cursor:pointer;font-family:inherit">→</button>
-      </div>
-    </div>`;
+      ${cap.notes?`<div style="font-size:12px;color:#7a6a58;text-align:center;font-style:italic;max-width:280px;line-height:1.5">${cap.notes}</div>`:''}
+      <button data-action="museum-edit" data-id="${cap.id}" style="margin-top:20px;padding:10px 24px;border-radius:12px;border:1px solid #ff8c0044;background:#ff8c0012;color:#ffaa33;font-weight:700;font-size:13px;cursor:pointer;font-family:inherit">✏️ Editar</button>
+    </div>`).join('');
+
+  // scroll to current index
+  setTimeout(() => {
+    const scroll = document.getElementById('museum-scroll');
+    if (scroll) scroll.scrollTop = museumIndex * window.innerHeight;
+  }, 50);
 }
 
 
@@ -1787,9 +1790,9 @@ async function aiOptimizePhoto() {
   if (btn) { btn.textContent = '⟳ Analisando foto...'; btn.disabled = true; }
 
   try {
-    const prompt = `Analise esta foto de uma tampinha de garrafa e retorne APENAS um JSON com os melhores ajustes para melhorar a qualidade visual, sem markdown:
-{"brightness": <número 60-140>, "contrast": <número 80-140>, "saturation": <número 80-160>, "reason": "<explicação curta em português>"}
-Considere: se a foto estiver escura aumente brilho, se sem cor aumente saturação, se sem definição aumente contraste. Retorne SOMENTE o JSON.`;
+    const prompt = `Analise esta foto de uma tampinha de garrafa. Avalie brilho, contraste, saturação e nitidez e retorne APENAS um JSON com ajustes ideais, sem markdown:
+{"brightness": <60-130>, "contrast": <90-150>, "saturation": <80-170>, "sharpness": <0-4>, "reason": "<explicação em português do que foi ajustado>"}
+Regras: se houver claridade excessiva/reflexo, reduza brilho abaixo de 100. Se imagem desbotada, aumente saturação. Se sem nitidez, aumente contraste e sharpness. Se boa qualidade, ajuste levemente. Retorne SOMENTE o JSON.`;
 
     const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${GEMINI_KEY}`, {
       method: 'POST',
@@ -1812,7 +1815,7 @@ Considere: se a foto estiver escura aumente brilho, se sem cor aumente saturaç�
       brightness: Math.min(150, Math.max(50,  result.brightness  || 100)),
       contrast:   Math.min(150, Math.max(50,  result.contrast    || 100)),
       saturation: Math.min(200, Math.max(0,   result.saturation  || 100)),
-      sharpness:  optFilters.sharpness,
+      sharpness:  Math.min(5,   Math.max(0,   result.sharpness   || 0)),
     };
     optFilters = newFilters;
 
@@ -1837,6 +1840,27 @@ Considere: se a foto estiver escura aumente brilho, se sem cor aumente saturaç�
   }
 }
 
+
+function openLightbox(src) {
+  const existing = document.getElementById('photo-lightbox');
+  if (existing) existing.remove();
+  const overlay = document.createElement('div');
+  overlay.id = 'photo-lightbox';
+  overlay.style.cssText = 'position:fixed;inset:0;background:#000;z-index:9999;display:flex;flex-direction:column';
+  overlay.innerHTML = `
+    <div style="padding:max(52px,16px) 16px 12px;display:flex;align-items:center;background:rgba(0,0,0,.6);flex-shrink:0">
+      <button onclick="document.getElementById('photo-lightbox').remove()" 
+        style="background:rgba(255,255,255,.15);border:1px solid rgba(255,255,255,.2);color:#fff;border-radius:10px;padding:9px 18px;font-size:15px;font-weight:700;cursor:pointer;font-family:inherit">
+        ← Voltar
+      </button>
+    </div>
+    <div style="flex:1;display:flex;align-items:center;justify-content:center;overflow:hidden;padding:16px"
+      onclick="document.getElementById('photo-lightbox').remove()">
+      <img src="${src}" style="max-width:100%;max-height:100%;object-fit:contain;border-radius:8px"/>
+    </div>`;
+  document.body.appendChild(overlay);
+}
+
 // ── Boot ──
 document.getElementById('app').innerHTML=`<div style="min-height:100vh;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:14px;background:${T.bg}"><div style="font-size:48px;animation:pulse 1.4s ease infinite">🍺</div><div style="color:${T.muted};font-size:14px;font-family:system-ui">Carregando...</div></div>`;
 
@@ -1854,6 +1878,6 @@ window.checkDuplicate=checkDuplicate; window.loadPhoto=loadPhoto;
 window.openCrop=openCrop; window.confirmCrop=confirmCrop; window.drawCrop=drawCrop;
 window.cropDown=cropDown; window.cropMove=cropMove; window.cropUp=cropUp;
 window.updatePhotoThumb=updatePhotoThumb; window.renderList=renderList;
-window.saveGeminiKey=saveGeminiKey; window.openPhotoOpt=openPhotoOpt; window.applyOptFilters=applyOptFilters; window.drawOptPreview=drawOptPreview; window.aiOptimizePhoto=aiOptimizePhoto; window.checkServerVersion=checkServerVersion; window.renderStats=renderStats; window.searchByPhoto=searchByPhoto; window.loadPsPhoto=loadPsPhoto; window.renderAchievements=renderAchievements; window.renderMap=renderMap; window.openMuseum=openMuseum; window.shareCap=shareCap; window.loadGeminiKey=loadGeminiKey; window.triggerCamera=triggerCamera; window.triggerGallery=triggerGallery; window.renderProfile=renderProfile; window.updateNavAvatar=updateNavAvatar; window.renderSettings=renderSettings;
+window.openLightbox=openLightbox; window.saveGeminiKey=saveGeminiKey; window.openPhotoOpt=openPhotoOpt; window.applyOptFilters=applyOptFilters; window.drawOptPreview=drawOptPreview; window.aiOptimizePhoto=aiOptimizePhoto; window.checkServerVersion=checkServerVersion; window.renderStats=renderStats; window.searchByPhoto=searchByPhoto; window.loadPsPhoto=loadPsPhoto; window.renderAchievements=renderAchievements; window.renderMap=renderMap; window.openMuseum=openMuseum; window.shareCap=shareCap; window.loadGeminiKey=loadGeminiKey; window.triggerCamera=triggerCamera; window.triggerGallery=triggerGallery; window.renderProfile=renderProfile; window.updateNavAvatar=updateNavAvatar; window.renderSettings=renderSettings;
 window.rotateCrop=rotateCrop; window.rotateCropTo=rotateCropTo; window.resetCrop=resetCrop;
 window.runAI=runAI; window.applyAI=applyAI; window.dismissAI=dismissAI;
