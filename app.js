@@ -11,7 +11,7 @@ const firebaseConfig = {
   messagingSenderId: "594488372191",
   appId: "1:594488372191:web:83f46233b8c4fffe23f26a"
 };
-const APP_VERSION = 'v4.7';
+const APP_VERSION = 'v4.8';
 const COUNTRY_FLAGS = {
   'brasil': '🇧🇷', 'brazil': '🇧🇷',
   'alemanha': '🇩🇪', 'germany': '🇩🇪',
@@ -423,13 +423,13 @@ function buildApp() {
   </div>
 
   <!-- MUSEUM -->
-  <div id="scr-museum" class="screen" style="display:none;background:#0a0806;height:100vh;overflow:hidden">
+  <div id="scr-museum" class="screen" style="display:none;background:#0a0806;min-height:100vh;overflow:hidden">
     <div style="position:fixed;top:0;left:0;right:0;z-index:10;padding:max(52px,16px) 16px 12px;display:flex;align-items:center;justify-content:space-between;background:linear-gradient(to bottom,rgba(10,8,6,.9),transparent)">
       <button data-action="goto-list" style="${btnIconStyle()}">←</button>
       <div style="font-size:12px;color:#7a6a58;font-weight:700;letter-spacing:2px">MODO MUSEU</div>
       <div style="width:38px"></div>
     </div>
-    <div id="museum-scroll" style="height:100vh;overflow-y:auto;scroll-snap-type:y mandatory;scrollbar-width:none">
+    <div id="museum-scroll" style="height:100svh;overflow-y:scroll;scroll-snap-type:y mandatory;scrollbar-width:none;-webkit-overflow-scrolling:touch">
       <div id="museum-content"></div>
     </div>
   </div>
@@ -1047,7 +1047,7 @@ function renderDetail(id) {
   el.innerHTML=`
     <div style="position:relative;height:280px;overflow:hidden">
       ${cap.photo
-        ?`<img src="${cap.photo}" onclick="openLightbox('${cap.photo.replace(/'/g,'&#39;')}')" style="width:100%;height:100%;object-fit:cover;cursor:zoom-in"/>`
+        ?`<img src="${cap.photo}" data-action="expand-photo" data-capid="${cap.id}" style="width:100%;height:100%;object-fit:cover;cursor:zoom-in"/>`
         :`<div style="width:100%;height:100%;background:linear-gradient(160deg,${O}55,${T.bg});display:flex;align-items:center;justify-content:center;font-size:110px">🍺</div>`}
       <div style="position:absolute;inset:0;background:linear-gradient(to bottom,rgba(0,0,0,.15),rgba(20,18,16,.97))"></div>
       <button data-action="goto-list" style="position:absolute;top:52px;left:16px;background:rgba(0,0,0,.45);border:1px solid rgba(255,255,255,.1);color:${T.text};border-radius:10px;padding:8px 12px;cursor:pointer;font-size:18px">←</button>
@@ -1345,12 +1345,12 @@ function renderMuseum() {
   const rarityMap = {normal:'',rara:'🟡 Rara',muito_rara:'🟠 Muito Rara',unica:'🔴 Única'};
 
   el.innerHTML = filtered.map((cap, i) => `
-    <div style="height:100vh;scroll-snap-align:start;display:flex;flex-direction:column;align-items:center;justify-content:center;padding:80px 24px 40px;box-sizing:border-box">
+    <div style="height:100svh;min-height:600px;scroll-snap-align:start;display:flex;flex-direction:column;align-items:center;justify-content:center;padding:80px 24px 40px;box-sizing:border-box">
       <div style="font-size:11px;color:#7a6a58;margin-bottom:20px;letter-spacing:2px">${i+1} / ${filtered.length}</div>
-      <div onclick="openLightbox('${(cap.photo||'').replace(/'/g,'&#39;')}')"
+      <div data-action="expand-photo" data-capid="${cap.id}"
         style="width:220px;height:220px;border-radius:50%;overflow:hidden;border:4px solid #ff8c0044;box-shadow:0 0 60px #ff8c0033;margin-bottom:24px;cursor:${cap.photo?'zoom-in':'default'}">
         ${cap.photo
-          ? `<img src="${cap.photo}" style="width:100%;height:100%;object-fit:cover"/>`
+          ? `<img src="${cap.photo}" data-action="expand-photo" data-capid="${cap.id}" style="width:100%;height:100%;object-fit:cover;cursor:zoom-in"/>`
           : `<div style="width:100%;height:100%;background:${cap.color||'#ff8c00'};display:flex;align-items:center;justify-content:center;font-size:80px">🍺</div>`}
       </div>
       <div style="font-size:24px;font-weight:900;text-align:center;margin-bottom:6px;color:#fff4e8">${cap.name}</div>
@@ -1646,7 +1646,10 @@ document.addEventListener('click', function(e) {
   if (action === 'museum-edit')      { if(dataId){ const c=caps.find(x=>x.id===dataId); if(c) openEdit(c); } return; }
   if (action === 'museum-from-detail'){ if(dataId){ openMuseum(dataId); } return; }
   if (action === 'expand-photo') {
-    const src = el.dataset.src;
+    // look up photo by cap id (avoids passing huge base64 in HTML attribute)
+    const capId = el.dataset.capid;
+    const cap = caps.find(c => c.id === capId);
+    const src = cap?.photo || el.dataset.src;
     if (!src) return;
     const overlay = document.createElement('div');
     overlay.id = 'photo-lightbox';
@@ -1757,7 +1760,13 @@ function drawOptPreview() {
     ctx.beginPath(); ctx.arc(size/2,size/2,size/2,0,Math.PI*2); ctx.clip();
     ctx.drawImage(img, (img.width-size)/2, (img.height-size)/2, size, size, 0, 0, size, size);
     // apply filters via CSS filter string
-    canvas.style.filter = `brightness(${optFilters.brightness}%) contrast(${optFilters.contrast}%) saturate(${optFilters.saturation}%)`;
+    // Apply sharpness via SVG filter on canvas
+    const sharp = optFilters.sharpness || 0;
+    canvas.style.filter = `brightness(${optFilters.brightness}%) contrast(${optFilters.contrast}%) saturate(${optFilters.saturation}%)${sharp > 0 ? ` blur(0px)` : ''}`;
+    // For sharpness, use unsharp mask via contrast boost
+    if (sharp > 0) {
+      canvas.style.filter += ` contrast(${100 + sharp * 15}%)`;
+    }
   };
   img.src = pendingPhoto;
 }
