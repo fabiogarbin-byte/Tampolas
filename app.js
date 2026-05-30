@@ -11,7 +11,7 @@ const firebaseConfig = {
   messagingSenderId: "594488372191",
   appId: "1:594488372191:web:83f46233b8c4fffe23f26a"
 };
-const APP_VERSION = 'v4.5';
+const APP_VERSION = 'v4.6';
 const COUNTRY_FLAGS = {
   'brasil': '🇧🇷', 'brazil': '🇧🇷',
   'alemanha': '🇩🇪', 'germany': '🇩🇪',
@@ -1044,7 +1044,11 @@ function renderDetail(id) {
   const el=document.getElementById('scr-detail'); if(!el) return;
   el.innerHTML=`
     <div style="position:relative;height:280px;overflow:hidden">
-      ${cap.photo?`<img src="${cap.photo}" data-action="expand-photo" data-src="${cap.photo}" style="width:100%;height:100%;object-fit:cover;cursor:zoom-in"/>`:`<div style="width:100%;height:100%;background:linear-gradient(160deg,${O}55,${T.bg});display:flex;align-items:center;justify-content:center;font-size:110px">🍺</div>`}
+      ${cap.photo
+        ?`<div data-action="expand-photo" data-src="${cap.photo}" style="width:100%;height:100%;cursor:zoom-in">
+            <img src="${cap.photo}" style="width:100%;height:100%;object-fit:cover;pointer-events:none"/>
+          </div>`
+        :`<div style="width:100%;height:100%;background:linear-gradient(160deg,${O}55,${T.bg});display:flex;align-items:center;justify-content:center;font-size:110px">🍺</div>`}
       <div style="position:absolute;inset:0;background:linear-gradient(to bottom,rgba(0,0,0,.15),rgba(20,18,16,.97))"></div>
       <button data-action="goto-list" style="position:absolute;top:52px;left:16px;background:rgba(0,0,0,.45);border:1px solid rgba(255,255,255,.1);color:${T.text};border-radius:10px;padding:8px 12px;cursor:pointer;font-size:18px">←</button>
       <div style="position:absolute;bottom:16px;left:16px;right:16px">
@@ -1345,7 +1349,7 @@ function renderMuseum() {
       <div style="font-size:11px;color:#7a6a58;margin-bottom:20px;letter-spacing:2px">${museumIndex+1} / ${filtered.length}</div>
       <div style="width:240px;height:240px;border-radius:50%;overflow:hidden;border:4px solid #ff8c0044;box-shadow:0 0 60px #ff8c0033;margin-bottom:28px">
         ${cap.photo
-          ? `<img src="${cap.photo}" style="width:100%;height:100%;object-fit:cover"/>`
+          ? `<div data-action="expand-photo" data-src="${cap.photo}" style="width:100%;height:100%;cursor:zoom-in"><img src="${cap.photo}" style="width:100%;height:100%;object-fit:cover;pointer-events:none"/></div>`
           : `<div style="width:100%;height:100%;background:${cap.color||'#ff8c00'};display:flex;align-items:center;justify-content:center;font-size:80px">🍺</div>`}
       </div>
       <div style="font-size:24px;font-weight:900;text-align:center;margin-bottom:6px">${cap.name}</div>
@@ -1642,9 +1646,19 @@ document.addEventListener('click', function(e) {
     const src = el.dataset.src;
     if (!src) return;
     const overlay = document.createElement('div');
-    overlay.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,.95);z-index:9999;display:flex;align-items:center;justify-content:center;cursor:zoom-out';
-    overlay.innerHTML = `<img src="${src}" style="max-width:100%;max-height:100%;object-fit:contain;border-radius:12px"/>`;
-    overlay.addEventListener('click', () => overlay.remove());
+    overlay.id = 'photo-lightbox';
+    overlay.style.cssText = 'position:fixed;inset:0;background:#000;z-index:9999;display:flex;flex-direction:column;align-items:center;justify-content:center;animation:fadeIn .2s ease';
+    overlay.innerHTML = `
+      <div style="position:absolute;top:0;left:0;right:0;padding:max(52px,env(safe-area-inset-top,52px)) 16px 12px;display:flex;align-items:center;justify-content:space-between;background:linear-gradient(to bottom,rgba(0,0,0,.8),transparent);z-index:1">
+        <button id="lightbox-back" style="background:rgba(255,255,255,.15);border:1px solid rgba(255,255,255,.2);color:#fff;border-radius:10px;padding:8px 16px;font-size:15px;font-weight:700;cursor:pointer;font-family:inherit;backdrop-filter:blur(8px)">← Voltar</button>
+      </div>
+      <img src="${src}" style="max-width:100%;max-height:100vh;object-fit:contain" id="lightbox-img"/>
+      <div style="position:absolute;bottom:24px;font-size:12px;color:rgba(255,255,255,.4)">Toque para fechar</div>`;
+    // Close on back button
+    overlay.querySelector('#lightbox-back').addEventListener('click', e => { e.stopPropagation(); overlay.remove(); });
+    // Close on tap outside image
+    overlay.addEventListener('click', e => { if (e.target.id !== 'lightbox-back') overlay.remove(); });
+    // Handle pinch zoom on image
     document.body.appendChild(overlay);
     return;
   }
