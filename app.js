@@ -11,7 +11,7 @@ const firebaseConfig = {
   messagingSenderId: "594488372191",
   appId: "1:594488372191:web:83f46233b8c4fffe23f26a"
 };
-const APP_VERSION = 'v4.8';
+const APP_VERSION = 'v5.0';
 const COUNTRY_FLAGS = {
   'brasil': '🇧🇷', 'brazil': '🇧🇷',
   'alemanha': '🇩🇪', 'germany': '🇩🇪',
@@ -407,7 +407,8 @@ function buildApp() {
   <div id="scr-stats" class="screen" style="display:none;padding-bottom:90px">
     <div style="padding:52px 16px 14px;display:flex;align-items:center;gap:12px">
       <button data-action="goto-home" style="${btnIconStyle()}">←</button>
-      <div style="font-weight:800;font-size:18px">Estatísticas</div>
+      <div style="flex:1;font-weight:800;font-size:18px">Estatísticas</div>
+      <button data-action="export-pdf" style="background:#1e1a16;border:1px solid #2e2618;color:#ffaa33;border-radius:10px;padding:8px 12px;font-size:12px;font-weight:700;cursor:pointer;font-family:inherit">📄 Exportar</button>
     </div>
     <div id="stats-content" style="padding:0 16px;display:flex;flex-direction:column;gap:14px"></div>
   </div>
@@ -424,12 +425,23 @@ function buildApp() {
 
   <!-- MUSEUM -->
   <div id="scr-museum" class="screen" style="display:none;background:#0a0806;min-height:100vh;overflow:hidden">
-    <div style="position:fixed;top:0;left:0;right:0;z-index:10;padding:max(52px,16px) 16px 12px;display:flex;align-items:center;justify-content:space-between;background:linear-gradient(to bottom,rgba(10,8,6,.9),transparent)">
-      <button data-action="goto-list" style="${btnIconStyle()}">←</button>
-      <div style="font-size:12px;color:#7a6a58;font-weight:700;letter-spacing:2px">MODO MUSEU</div>
-      <div style="width:38px"></div>
+    <!-- Fixed header with filters -->
+    <div style="position:fixed;top:0;left:0;right:0;z-index:10;background:rgba(10,8,6,.97);border-bottom:1px solid #1a1510">
+      <div style="padding:max(52px,16px) 16px 10px;display:flex;align-items:center;gap:10px">
+        <button data-action="goto-list" style="${btnIconStyle()}">←</button>
+        <div style="flex:1;position:relative">
+          <span style="position:absolute;left:12px;top:50%;transform:translateY(-50%);font-size:14px;pointer-events:none">🔍</span>
+          <input id="museum-search" placeholder="Buscar tampola..."
+            style="width:100%;background:#1a1510;border:1px solid #2e2618;color:#fff4e8;border-radius:10px;padding:9px 12px 9px 34px;font-size:14px;outline:none;font-family:inherit;box-sizing:border-box"/>
+        </div>
+      </div>
+      <div style="padding:0 16px 10px;display:flex;gap:6px;overflow-x:auto;scrollbar-width:none">
+        <button data-museum-filter="all" style="flex-shrink:0;padding:5px 12px;border-radius:16px;border:1px solid #ff8c0055;background:#ff8c0020;color:#ff8c00;font-size:11px;font-weight:700;cursor:pointer;font-family:inherit">Todas</button>
+        <div id="museum-filter-chips" style="display:flex;gap:6px"></div>
+      </div>
     </div>
-    <div id="museum-scroll" style="height:100svh;overflow-y:scroll;scroll-snap-type:y mandatory;scrollbar-width:none;-webkit-overflow-scrolling:touch">
+    <!-- Scrollable content -->
+    <div id="museum-scroll" style="height:100svh;overflow-y:scroll;scroll-snap-type:y mandatory;scrollbar-width:none;-webkit-overflow-scrolling:touch;padding-top:110px;box-sizing:border-box">
       <div id="museum-content"></div>
     </div>
   </div>
@@ -468,6 +480,7 @@ function buildApp() {
           {id:'opt-contrast',   label:'⬛ Contraste',   min:50,  max:150, val:100},
           {id:'opt-saturation', label:'🎨 Saturação',   min:0,   max:200, val:100},
           {id:'opt-sharpness',  label:'🔍 Nitidez',     min:0,   max:5,   val:0, step:0.5},
+          {id:'opt-dehaze',     label:'🌫️ Tirar reflexo', min:0, max:100, val:0},
         ].map(s=>`<div>
           <div style="display:flex;justify-content:space-between;margin-bottom:6px">
             <span style="font-size:13px;font-weight:600">${s.label}</span>
@@ -480,6 +493,17 @@ function buildApp() {
       </div>
       <button data-action="opt-confirm" style="width:100%;padding:16px;border-radius:14px;border:none;background:linear-gradient(135deg,#ff8c00,#c05500);color:#fff;font-weight:800;font-size:16px;cursor:pointer;font-family:inherit">✓ Aplicar e Salvar</button>
     </div>
+  </div>
+
+
+  <!-- COMPARE -->
+  <div id="scr-compare" class="screen" style="display:none;padding-bottom:90px">
+    <div style="padding:52px 16px 14px;display:flex;align-items:center;gap:12px">
+      <button data-action="goto-list" style="${btnIconStyle()}">←</button>
+      <div><div style="font-weight:800;font-size:18px">⚖️ Comparar</div>
+      <div style="font-size:11px;color:${T.muted}">Selecione duas tampolas</div></div>
+    </div>
+    <div id="compare-content" style="padding:0 16px"></div>
   </div>
 
   <!-- NAV -->
@@ -907,6 +931,7 @@ function renderHome() {
         {a:'goto-achievements', ic:'🏆', l:'Conquistas'},
         {a:'goto-map',          ic:'🗺️', l:'Mapa'},
         {a:'goto-stats',        ic:'📊', l:'Stats'},
+        {a:'goto-compare',       ic:'⚖️', l:'Comparar'},
       ].map(x=>`<button data-action="${x.a}" style="flex-shrink:0;display:flex;flex-direction:column;align-items:center;gap:4px;padding:12px 16px;border-radius:14px;border:1px solid #2e2618;background:#1e1a16;color:#fff4e8;cursor:pointer;font-family:inherit">
         <span style="font-size:22px">${x.ic}</span>
         <span style="font-size:11px;font-weight:700;color:#7a6a58">${x.l}</span>
@@ -1012,11 +1037,14 @@ function capGridHTML(cap) {
   const thumb = cap.photo
     ? `<img src="${cap.photo}" style="width:100%;height:100%;object-fit:cover"/>`
     : `<div style="width:100%;height:100%;background:${cap.color||'#ff8c00'};display:flex;align-items:center;justify-content:center;font-size:28px">🍺</div>`;
-  return `<div data-action="open-detail" data-id="${cap.id}"
-    style="border-radius:12px;overflow:hidden;cursor:pointer;background:#1e1a16;border:1px solid #2e2618;aspect-ratio:1;position:relative">
-    ${thumb}
+  return `<div style="border-radius:12px;overflow:hidden;background:#1e1a16;border:1px solid #2e2618;aspect-ratio:1;position:relative">
+    <div data-action="open-detail" data-id="${cap.id}" style="width:100%;height:100%;cursor:pointer;position:absolute;inset:0">
+      ${thumb}
+    </div>
     ${rarityBadge(cap)}
-    <div style="position:absolute;bottom:0;left:0;right:0;background:linear-gradient(transparent,rgba(0,0,0,.85));padding:6px 6px 5px">
+    ${cap.photo ? `<button data-action="expand-photo" data-capid="${cap.id}"
+      style="position:absolute;top:4px;right:4px;width:26px;height:26px;border-radius:6px;border:none;background:rgba(0,0,0,.6);color:#fff;font-size:13px;cursor:pointer;display:flex;align-items:center;justify-content:center;z-index:2">⛶</button>` : ''}
+    <div style="position:absolute;bottom:0;left:0;right:0;background:linear-gradient(transparent,rgba(0,0,0,.85));padding:6px 6px 5px;pointer-events:none">
       <div style="font-size:10px;font-weight:700;color:#fff;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${cap.name}</div>
     </div>
   </div>`;
@@ -1063,6 +1091,7 @@ function renderDetail(id) {
       ${cap.notes?`<div style="background:${T.card};border-radius:14px;padding:14px 16px;border:1px solid ${T.border};margin-bottom:12px"><div style="font-size:11px;color:${T.muted};font-weight:600;margin-bottom:6px">📝 Notas</div><div style="font-size:14px;color:#c0a888;line-height:1.6">${cap.notes}</div></div>`:''}
       <div style="display:flex;gap:10px;margin-bottom:10px">
         <button data-action="share-cap" data-id="${cap.id}" style="flex:1;padding:13px;border-radius:14px;border:1px solid #ff8c0044;background:#ff8c0012;color:#ffaa33;font-weight:700;font-size:14px;cursor:pointer;font-family:inherit">📤 Compartilhar</button>
+        <button data-action="compare-cap" data-id="${cap.id}" style="flex:1;padding:13px;border-radius:14px;border:1px solid #2e2618;background:#1e1a16;color:#7a6a58;font-weight:700;font-size:14px;cursor:pointer;font-family:inherit">⚖️ Comparar</button>
         <button data-action="museum-from-detail" data-id="${cap.id}" style="flex:1;padding:13px;border-radius:14px;border:1px solid #2e2618;background:#1e1a16;color:#7a6a58;font-weight:700;font-size:14px;cursor:pointer;font-family:inherit">🖼️ Museu</button>
       </div>
       <div style="display:flex;gap:10px">
@@ -1309,12 +1338,12 @@ function renderAchievements() {
 let museumIndex = 0;
 
 function openMuseum(startId) {
-  const filtered = getFilteredSorted();
+  museumFilter = {type:'all',value:''}; museumSearchQ = '';
+  const filtered = getMuseumCaps();
   museumIndex = filtered.findIndex(c => c.id === startId);
   if (museumIndex < 0) museumIndex = 0;
-  renderMuseum();
   goTo('museum');
-  attachMuseumSwipe();
+  setTimeout(() => { renderMuseum(); attachMuseumSwipe(); }, 50);
 }
 
 function attachMuseumSwipe() {
@@ -1336,14 +1365,47 @@ function attachMuseumSwipe() {
   }, { passive:true });
 }
 
+let museumFilter = { type:'all', value:'' };
+let museumSearchQ = '';
+
+function getMuseumCaps() {
+  let result = caps;
+  const q = museumSearchQ.toLowerCase();
+  if (q) result = result.filter(c =>
+    c.name.toLowerCase().includes(q) ||
+    (c.brand||'').toLowerCase().includes(q) ||
+    (c.country||'').toLowerCase().includes(q)
+  );
+  if (museumFilter.type === 'country') result = result.filter(c => (c.country||'') === museumFilter.value);
+  if (museumFilter.type === 'brand')   result = result.filter(c => (c.brand||'')   === museumFilter.value);
+  return result;
+}
+
+function renderMuseumChips() {
+  const el = document.getElementById('museum-filter-chips');
+  if (!el) return;
+  const countries = [...new Set(caps.map(c=>c.country).filter(Boolean))];
+  const brands    = [...new Set(caps.map(c=>c.brand).filter(Boolean))];
+  const chips = [
+    ...countries.map(v=>({ type:'country', value:v, label: countryFlag(v)+' '+v })),
+    ...brands.map(v=>({ type:'brand', value:v, label:'🏷️ '+v })),
+  ];
+  el.innerHTML = chips.map(f => {
+    const active = museumFilter.type===f.type && museumFilter.value===f.value;
+    return `<button data-museum-filter-type="${f.type}" data-museum-filter-value="${f.value}"
+      style="flex-shrink:0;padding:5px 12px;border-radius:16px;border:1px solid ${active?'#ff8c00':'#2e2618'};background:${active?'#ff8c0020':'#1a1510'};color:${active?'#ff8c00':'#7a6a58'};font-size:11px;font-weight:700;cursor:pointer;font-family:inherit">${f.label}</button>`;
+  }).join('');
+}
+
 function renderMuseum() {
-  const filtered = getFilteredSorted();
-  if (!filtered.length) return;
-  museumIndex = Math.max(0, Math.min(museumIndex, filtered.length-1));
+  renderMuseumChips();
+  const filtered = getMuseumCaps();
+  museumIndex = Math.max(0, Math.min(museumIndex, Math.max(0, filtered.length-1)));
   const el = document.getElementById('museum-content');
   if (!el) return;
   const rarityMap = {normal:'',rara:'🟡 Rara',muito_rara:'🟠 Muito Rara',unica:'🔴 Única'};
 
+  if (!filtered.length) { el.innerHTML = '<div style="height:100svh;display:flex;align-items:center;justify-content:center;color:#3a3028;font-size:14px">Nenhuma tampola encontrada</div>'; return; }
   el.innerHTML = filtered.map((cap, i) => `
     <div style="height:100svh;min-height:600px;scroll-snap-align:start;display:flex;flex-direction:column;align-items:center;justify-content:center;padding:80px 24px 40px;box-sizing:border-box">
       <div style="font-size:11px;color:#7a6a58;margin-bottom:20px;letter-spacing:2px">${i+1} / ${filtered.length}</div>
@@ -1587,7 +1649,7 @@ function updateNavAvatar() {
 
 // ── Event delegation — handles dynamically created buttons ──
 document.addEventListener('click', function(e) {
-  const el = e.target.closest('[data-action],[data-filter-type],[data-sort],[data-id],[id]');
+  const el = e.target.closest('[data-action],[data-filter-type],[data-sort],[data-id],[data-museum-filter],[data-museum-filter-type],[id]');
   if (!el) return;
 
   const action = el.dataset.action;
@@ -1623,6 +1685,16 @@ document.addEventListener('click', function(e) {
   if (action === 'delete-cap' && dataId) { deleteCap(dataId); return; }
 
   if (action === 'goto-stats')    { goTo('stats'); renderStats(); return; }
+  if (action === 'export-pdf')        { exportPDF(); return; }
+  if (action === 'compare-cap')      { if(dataId) openCompare(dataId); return; }
+  if (action === 'goto-compare')     { openCompare(null); return; }
+  if (action === 'pick-compare-slot'){ showComparePicker(el.dataset.slot); return; }
+  if (action === 'select-compare-cap') {
+    compareIds[activeCompareSlot] = dataId;
+    const picker = document.getElementById('compare-picker');
+    if (picker) picker.style.display = 'none';
+    renderCompare(); return;
+  }
   if (action === 'goto-achievements') { goTo('achievements'); renderAchievements(); return; }
   if (action === 'goto-map')         { goTo('map'); renderMap(); return; }
   if (action === 'open-photo-opt')  { openPhotoOpt(); return; }
@@ -1673,6 +1745,15 @@ document.addEventListener('click', function(e) {
   if (action === 'ps-camera')  { const el=document.getElementById('ps-cam'); if(el){el.value='';el.click();} return; }
   if (action === 'ps-gallery') { const el=document.getElementById('ps-gal'); if(el){el.value='';el.click();} return; }
   if (action === 'ps-search')  { searchByPhoto(); return; }
+  // museum filter chips
+  const mfType = el.dataset.museumFilterType, mfVal = el.dataset.museumFilterValue;
+  if (mfType && mfVal) {
+    museumFilter = museumFilter.type===mfType && museumFilter.value===mfVal
+      ? {type:'all',value:''} : {type:mfType,value:mfVal};
+    renderMuseum(); return;
+  }
+  const mfAll = el.dataset.museumFilter;
+  if (mfAll === 'all') { museumFilter={type:'all',value:''}; renderMuseum(); return; }
   if (action === 'toggle-view')  {
     listView = listView === 'list' ? 'grid' : 'list';
     const btn = document.getElementById('btn-view-toggle');
@@ -1711,6 +1792,12 @@ document.addEventListener('change', function(e) {
 });
 
 document.addEventListener('input', function(e) {
+  // museum search
+  if (e.target.id === 'museum-search') {
+    museumSearchQ = e.target.value;
+    renderMuseum();
+    return;
+  }
   const optKey = e.target.dataset.opt;
   if (optKey) {
     const key = optKey.replace('opt-','');
@@ -1727,7 +1814,7 @@ document.addEventListener('input', function(e) {
 
 
 // ── Photo Optimization ──
-let optFilters = { brightness:100, contrast:100, saturation:100, sharpness:0 };
+let optFilters = { brightness:100, contrast:100, saturation:100, sharpness:0, dehaze:0 };
 
 function openPhotoOpt() {
   if (!pendingPhoto) return;
@@ -1760,13 +1847,19 @@ function drawOptPreview() {
     ctx.beginPath(); ctx.arc(size/2,size/2,size/2,0,Math.PI*2); ctx.clip();
     ctx.drawImage(img, (img.width-size)/2, (img.height-size)/2, size, size, 0, 0, size, size);
     // apply filters via CSS filter string
-    // Apply sharpness via SVG filter on canvas
-    const sharp = optFilters.sharpness || 0;
-    canvas.style.filter = `brightness(${optFilters.brightness}%) contrast(${optFilters.contrast}%) saturate(${optFilters.saturation}%)${sharp > 0 ? ` blur(0px)` : ''}`;
-    // For sharpness, use unsharp mask via contrast boost
-    if (sharp > 0) {
-      canvas.style.filter += ` contrast(${100 + sharp * 15}%)`;
+    const sharp  = optFilters.sharpness || 0;
+    const dehaze = optFilters.dehaze    || 0;
+    // Base filters
+    let filter = `brightness(${optFilters.brightness}%) contrast(${optFilters.contrast}%) saturate(${optFilters.saturation}%)`;
+    // Sharpness: boost contrast
+    if (sharp > 0) filter += ` contrast(${100 + sharp * 12}%)`;
+    // Dehaze/anti-reflection: reduce brightness of highlights by dimming + boosting contrast
+    if (dehaze > 0) {
+      const dimAmount  = 100 - (dehaze * 0.25);   // reduce overall brightness
+      const contBoost  = 100 + (dehaze * 0.4);     // boost contrast to recover darks
+      filter += ` brightness(${dimAmount}%) contrast(${contBoost}%)`;
     }
+    canvas.style.filter = filter;
   };
   img.src = pendingPhoto;
 }
@@ -1778,7 +1871,7 @@ function applyOptFilters() {
   const out = document.createElement('canvas');
   out.width = canvas.width; out.height = canvas.height;
   const ctx = out.getContext('2d');
-  ctx.filter = canvas.style.filter;
+  ctx.filter = canvas.style.filter || 'none';
   ctx.beginPath(); ctx.arc(canvas.width/2,canvas.height/2,canvas.width/2,0,Math.PI*2); ctx.clip();
   ctx.drawImage(canvas, 0, 0);
   pendingPhoto = out.toDataURL('image/jpeg', 0.85);
@@ -1800,7 +1893,7 @@ async function aiOptimizePhoto() {
 
   try {
     const prompt = `Analise esta foto de uma tampinha de garrafa. Avalie brilho, contraste, saturação e nitidez e retorne APENAS um JSON com ajustes ideais, sem markdown:
-{"brightness": <60-130>, "contrast": <90-150>, "saturation": <80-170>, "sharpness": <0-4>, "reason": "<explicação em português do que foi ajustado>"}
+{"brightness": <60-130>, "contrast": <90-150>, "saturation": <80-170>, "sharpness": <0-4>, "dehaze": <0-100 só se houver reflexo/claridade>, "reason": "<explicação em português do que foi ajustado>"}
 Regras: se houver claridade excessiva/reflexo, reduza brilho abaixo de 100. Se imagem desbotada, aumente saturação. Se sem nitidez, aumente contraste e sharpness. Se boa qualidade, ajuste levemente. Retorne SOMENTE o JSON.`;
 
     const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${GEMINI_KEY}`, {
@@ -1825,6 +1918,7 @@ Regras: se houver claridade excessiva/reflexo, reduza brilho abaixo de 100. Se i
       contrast:   Math.min(150, Math.max(50,  result.contrast    || 100)),
       saturation: Math.min(200, Math.max(0,   result.saturation  || 100)),
       sharpness:  Math.min(5,   Math.max(0,   result.sharpness   || 0)),
+      dehaze:     Math.min(100, Math.max(0,   result.dehaze      || 0)),
     };
     optFilters = newFilters;
 
@@ -1870,6 +1964,253 @@ function openLightbox(src) {
   document.body.appendChild(overlay);
 }
 
+
+// ── Export PDF ──
+async function exportPDF() {
+  if (!caps.length) { showToast('Coleção vazia!', 'err'); return; }
+  showToast('Gerando PDF...', 'info');
+
+  const COLS = 3, CELL = 220, PAD = 20, HEADER = 80;
+  const pageW = COLS * CELL + (COLS + 1) * PAD;
+  const ROWS_PER_PAGE = 4;
+  const pageH = ROWS_PER_PAGE * CELL + (ROWS_PER_PAGE + 1) * PAD + HEADER;
+
+  const pages = [];
+  const totalPages = Math.ceil(caps.length / (COLS * ROWS_PER_PAGE));
+
+  for (let p = 0; p < totalPages; p++) {
+    const canvas = document.createElement('canvas');
+    canvas.width = pageW; canvas.height = pageH;
+    const ctx = canvas.getContext('2d');
+
+    // Background
+    ctx.fillStyle = '#141210';
+    ctx.fillRect(0, 0, pageW, pageH);
+
+    // Header
+    ctx.fillStyle = '#ff8c00';
+    ctx.fillRect(0, 0, pageW, HEADER);
+    ctx.fillStyle = '#fff';
+    ctx.font = 'bold 28px system-ui, sans-serif';
+    ctx.textAlign = 'left';
+    ctx.fillText('🍺 Tampolas — Minha Coleção', PAD, 48);
+    ctx.font = '14px system-ui, sans-serif';
+    ctx.fillStyle = 'rgba(255,255,255,.7)';
+    ctx.fillText(`${caps.length} tampola${caps.length!==1?'s':''} • Página ${p+1}/${totalPages}`, PAD, 68);
+
+    const startIdx = p * COLS * ROWS_PER_PAGE;
+    const pageCaps = caps.slice(startIdx, startIdx + COLS * ROWS_PER_PAGE);
+
+    for (let i = 0; i < pageCaps.length; i++) {
+      const cap = pageCaps[i];
+      const col = i % COLS;
+      const row = Math.floor(i / COLS);
+      const x = PAD + col * (CELL + PAD);
+      const y = HEADER + PAD + row * (CELL + PAD);
+
+      // Card background
+      ctx.fillStyle = '#1e1a16';
+      roundRect(ctx, x, y, CELL, CELL, 12);
+
+      // Rarity border color
+      const rarityColor = {rara:'#ffd700',muito_rara:'#ff8c00',unica:'#ef4444'}[cap.rarity||''] || '#2e2618';
+      ctx.strokeStyle = rarityColor;
+      ctx.lineWidth = cap.rarity && cap.rarity!=='normal' ? 2.5 : 1;
+      roundRect(ctx, x, y, CELL, CELL, 12, true);
+
+      const PHOTO_SIZE = 120;
+      const photoX = x + (CELL - PHOTO_SIZE) / 2;
+      const photoY = y + 10;
+
+      if (cap.photo) {
+        await new Promise(res => {
+          const img = new Image();
+          img.onload = () => {
+            ctx.save();
+            ctx.beginPath();
+            ctx.arc(photoX + PHOTO_SIZE/2, photoY + PHOTO_SIZE/2, PHOTO_SIZE/2, 0, Math.PI*2);
+            ctx.clip();
+            ctx.drawImage(img, photoX, photoY, PHOTO_SIZE, PHOTO_SIZE);
+            ctx.restore(); res();
+          };
+          img.onerror = res;
+          img.src = cap.photo;
+        });
+      } else {
+        ctx.fillStyle = cap.color ? colorToHex(cap.color) : '#ff8c00';
+        ctx.beginPath();
+        ctx.arc(photoX + PHOTO_SIZE/2, photoY + PHOTO_SIZE/2, PHOTO_SIZE/2, 0, Math.PI*2);
+        ctx.fill();
+        ctx.font = '40px serif';
+        ctx.textAlign = 'center';
+        ctx.fillText('🍺', photoX + PHOTO_SIZE/2, photoY + PHOTO_SIZE/2 + 14);
+      }
+
+      // Text below photo
+      ctx.textAlign = 'center';
+      const cx = x + CELL/2;
+
+      ctx.fillStyle = '#fff4e8';
+      ctx.font = 'bold 13px system-ui, sans-serif';
+      const name = cap.name.length > 18 ? cap.name.slice(0,16)+'…' : cap.name;
+      ctx.fillText(name, cx, photoY + PHOTO_SIZE + 18);
+
+      if (cap.brand) {
+        ctx.fillStyle = '#7a6a58';
+        ctx.font = '11px system-ui, sans-serif';
+        ctx.fillText(cap.brand, cx, photoY + PHOTO_SIZE + 34);
+      }
+
+      const tags = [cap.type, cap.country ? countryFlag(cap.country)+' '+cap.country : ''].filter(Boolean);
+      if (tags.length) {
+        ctx.fillStyle = '#ffaa33';
+        ctx.font = '10px system-ui, sans-serif';
+        ctx.fillText(tags.join(' · '), cx, photoY + PHOTO_SIZE + 48);
+      }
+    }
+
+    pages.push(canvas.toDataURL('image/png'));
+  }
+
+  // Build HTML PDF page
+  const html = `<!DOCTYPE html><html><head><meta charset="UTF-8">
+<title>Tampolas — Minha Coleção</title>
+<style>
+  body { margin:0; background:#141210; }
+  img  { display:block; width:100%; page-break-after:always; }
+  @media print { img { page-break-after:always; width:100%; } }
+</style></head><body>
+${pages.map(src => `<img src="${src}"/>`).join('')}
+<script>window.onload=()=>window.print();<\/script>
+</body></html>`;
+
+  const blob = new Blob([html], { type:'text/html' });
+  const url  = URL.createObjectURL(blob);
+  const a    = document.createElement('a');
+  a.href = url; a.download = 'tampolas-colecao.html'; a.click();
+  setTimeout(() => URL.revokeObjectURL(url), 3000);
+  showToast('PDF gerado! Abra o arquivo e imprima.', 'ok');
+}
+
+function roundRect(ctx, x, y, w, h, r, stroke=false) {
+  ctx.beginPath();
+  ctx.moveTo(x+r, y);
+  ctx.lineTo(x+w-r, y); ctx.arcTo(x+w, y, x+w, y+r, r);
+  ctx.lineTo(x+w, y+h-r); ctx.arcTo(x+w, y+h, x+w-r, y+h, r);
+  ctx.lineTo(x+r, y+h); ctx.arcTo(x, y+h, x, y+h-r, r);
+  ctx.lineTo(x, y+r); ctx.arcTo(x, y, x+r, y, r);
+  ctx.closePath();
+  if (stroke) ctx.stroke(); else ctx.fill();
+}
+
+function colorToHex(colorName) {
+  const map = {
+    'vermelha':'#e53e3e','vermelho':'#e53e3e',
+    'azul':'#3182ce','azul claro':'#63b3ed',
+    'verde':'#38a169','verde claro':'#68d391',
+    'dourada':'#d69e2e','dourado':'#d69e2e',
+    'prata':'#a0aec0','prateada':'#a0aec0',
+    'preta':'#2d3748','preto':'#2d3748',
+    'branca':'#f7fafc','branco':'#f7fafc',
+    'amarela':'#ecc94b','amarelo':'#ecc94b',
+    'laranja':'#ed8936',
+    'roxa':'#805ad5','roxo':'#805ad5',
+    'rosa':'#ed64a6',
+  };
+  return map[colorName.toLowerCase()] || '#ff8c00';
+}
+
+
+// ── Compare ──
+let compareIds = [null, null];
+
+function openCompare(fromId) {
+  compareIds = [fromId || null, null];
+  renderCompare();
+  goTo('compare');
+}
+
+function renderCompare() {
+  const el = document.getElementById('compare-content');
+  if (!el) return;
+
+  const cap0 = caps.find(c => c.id === compareIds[0]);
+  const cap1 = caps.find(c => c.id === compareIds[1]);
+
+  const slotHTML = (cap, slot) => {
+    if (!cap) return `
+      <div data-action="pick-compare-slot" data-slot="${slot}"
+        style="flex:1;min-height:200px;border-radius:16px;border:2px dashed #2e2618;background:#1a1510;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:10px;cursor:pointer;padding:16px">
+        <div style="font-size:36px">+</div>
+        <div style="font-size:13px;color:#7a6a58;text-align:center">Toque para selecionar</div>
+      </div>`;
+
+    const rarityMap = {normal:'⚪',rara:'🟡',muito_rara:'🟠',unica:'🔴'};
+    return `
+      <div style="flex:1;border-radius:16px;border:1px solid #2e2618;background:#1e1a16;padding:14px;display:flex;flex-direction:column;align-items:center;gap:8px">
+        <div style="width:90px;height:90px;border-radius:50%;overflow:hidden;border:2px solid #ff8c0055;flex-shrink:0">
+          ${cap.photo
+            ? `<img src="${cap.photo}" style="width:100%;height:100%;object-fit:cover"/>`
+            : `<div style="width:100%;height:100%;background:#ff8c00;display:flex;align-items:center;justify-content:center;font-size:36px">🍺</div>`}
+        </div>
+        <div style="font-weight:800;font-size:13px;text-align:center;color:#fff4e8">${cap.name}</div>
+        <div style="font-size:11px;color:#7a6a58;text-align:center">${cap.brand||'—'}</div>
+        <button data-action="pick-compare-slot" data-slot="${slot}" style="font-size:11px;color:#7a6a58;background:none;border:1px solid #2e2618;border-radius:8px;padding:4px 10px;cursor:pointer;font-family:inherit">Trocar</button>
+      </div>`;
+  };
+
+  const fields = ['brand','type','color','country','rarity'];
+  const labels = { brand:'Marca', type:'Tipo', color:'Cor', country:'País', rarity:'Raridade' };
+  const rarityLabel = { normal:'Normal', rara:'Rara', muito_rara:'Muito Rara', unica:'Única' };
+
+  const comparisonRows = cap0 && cap1 ? `
+    <div style="background:#1e1a16;border-radius:16px;padding:16px;border:1px solid #2e2618;margin-top:14px">
+      <div style="font-size:12px;font-weight:700;color:#7a6a58;letter-spacing:1px;text-transform:uppercase;margin-bottom:12px">Comparação</div>
+      ${fields.map(f => {
+        const v0 = f === 'rarity' ? rarityLabel[cap0[f]||'normal'] : (cap0[f]||'—');
+        const v1 = f === 'rarity' ? rarityLabel[cap1[f]||'normal'] : (cap1[f]||'—');
+        const same = v0.toLowerCase() === v1.toLowerCase();
+        return `<div style="display:flex;align-items:center;padding:8px 0;border-bottom:1px solid #252018">
+          <div style="flex:1;font-size:12px;text-align:center;color:${same?'#7a6a58':'#fff4e8'}">${v0}</div>
+          <div style="width:60px;text-align:center;font-size:11px;color:#7a6a58;font-weight:700">${labels[f]}</div>
+          <div style="flex:1;font-size:12px;text-align:center;color:${same?'#7a6a58':'#fff4e8'}">${v1}</div>
+        </div>`;
+      }).join('')}
+    </div>` : '';
+
+  el.innerHTML = `
+    <div style="display:flex;gap:10px;margin-bottom:4px">
+      ${slotHTML(cap0, 0)}
+      <div style="display:flex;align-items:center;font-size:20px;color:#3a3028;flex-shrink:0">vs</div>
+      ${slotHTML(cap1, 1)}
+    </div>
+    ${comparisonRows}
+    <div id="compare-picker" style="display:none;margin-top:14px">
+      <div style="font-size:12px;font-weight:700;color:#7a6a58;letter-spacing:1px;margin-bottom:10px">ESCOLHA UMA TAMPOLA</div>
+      <div id="compare-picker-list"></div>
+    </div>`;
+}
+
+let activeCompareSlot = 0;
+function showComparePicker(slot) {
+  activeCompareSlot = parseInt(slot);
+  const picker = document.getElementById('compare-picker');
+  const list   = document.getElementById('compare-picker-list');
+  if (!picker || !list) return;
+  picker.style.display = 'block';
+  list.innerHTML = caps.map(c => `
+    <div data-action="select-compare-cap" data-id="${c.id}"
+      style="display:flex;align-items:center;gap:10px;padding:10px 12px;border-radius:12px;cursor:pointer;border:1px solid #2e2618;background:#1a1510;margin-bottom:6px">
+      ${c.photo
+        ? `<img src="${c.photo}" style="width:36px;height:36px;border-radius:50%;object-fit:cover;flex-shrink:0"/>`
+        : `<div style="width:36px;height:36px;border-radius:50%;background:#ff8c00;display:flex;align-items:center;justify-content:center;font-size:16px;flex-shrink:0">🍺</div>`}
+      <div style="flex:1;min-width:0">
+        <div style="font-weight:700;font-size:14px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${c.name}</div>
+        <div style="font-size:12px;color:#7a6a58">${c.brand||'—'}</div>
+      </div>
+    </div>`).join('');
+}
+
 // ── Boot ──
 document.getElementById('app').innerHTML=`<div style="min-height:100vh;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:14px;background:${T.bg}"><div style="font-size:48px;animation:pulse 1.4s ease infinite">🍺</div><div style="color:${T.muted};font-size:14px;font-family:system-ui">Carregando...</div></div>`;
 
@@ -1887,6 +2228,6 @@ window.checkDuplicate=checkDuplicate; window.loadPhoto=loadPhoto;
 window.openCrop=openCrop; window.confirmCrop=confirmCrop; window.drawCrop=drawCrop;
 window.cropDown=cropDown; window.cropMove=cropMove; window.cropUp=cropUp;
 window.updatePhotoThumb=updatePhotoThumb; window.renderList=renderList;
-window.openLightbox=openLightbox; window.saveGeminiKey=saveGeminiKey; window.openPhotoOpt=openPhotoOpt; window.applyOptFilters=applyOptFilters; window.drawOptPreview=drawOptPreview; window.aiOptimizePhoto=aiOptimizePhoto; window.checkServerVersion=checkServerVersion; window.renderStats=renderStats; window.searchByPhoto=searchByPhoto; window.loadPsPhoto=loadPsPhoto; window.renderAchievements=renderAchievements; window.renderMap=renderMap; window.openMuseum=openMuseum; window.shareCap=shareCap; window.loadGeminiKey=loadGeminiKey; window.triggerCamera=triggerCamera; window.triggerGallery=triggerGallery; window.renderProfile=renderProfile; window.updateNavAvatar=updateNavAvatar; window.renderSettings=renderSettings;
+window.openLightbox=openLightbox; window.exportPDF=exportPDF; window.openCompare=openCompare; window.renderCompare=renderCompare; window.showComparePicker=showComparePicker; window.saveGeminiKey=saveGeminiKey; window.openPhotoOpt=openPhotoOpt; window.applyOptFilters=applyOptFilters; window.drawOptPreview=drawOptPreview; window.aiOptimizePhoto=aiOptimizePhoto; window.checkServerVersion=checkServerVersion; window.renderStats=renderStats; window.searchByPhoto=searchByPhoto; window.loadPsPhoto=loadPsPhoto; window.renderAchievements=renderAchievements; window.renderMap=renderMap; window.openMuseum=openMuseum; window.shareCap=shareCap; window.loadGeminiKey=loadGeminiKey; window.triggerCamera=triggerCamera; window.triggerGallery=triggerGallery; window.renderProfile=renderProfile; window.updateNavAvatar=updateNavAvatar; window.renderSettings=renderSettings;
 window.rotateCrop=rotateCrop; window.rotateCropTo=rotateCropTo; window.resetCrop=resetCrop;
 window.runAI=runAI; window.applyAI=applyAI; window.dismissAI=dismissAI;
