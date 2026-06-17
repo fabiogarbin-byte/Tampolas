@@ -535,7 +535,7 @@ function buildApp() {
   <div id="toast-el"></div>
 
   <!-- Confirm Modal -->
-  <div id="confirm-modal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.75);z-index:9998;display:none;align-items:center;justify-content:center;padding:32px">
+  <div id="confirm-modal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.75);z-index:9998;align-items:center;justify-content:center;padding:32px">
     <div style="background:#1e1a16;border-radius:20px;padding:28px 24px;width:100%;max-width:340px;border:1px solid #2e2618;box-shadow:0 20px 60px rgba(0,0,0,.6)">
       <div id="confirm-icon" style="font-size:40px;text-align:center;margin-bottom:14px"></div>
       <div id="confirm-title" style="font-weight:900;font-size:18px;text-align:center;margin-bottom:8px;color:#fff4e8"></div>
@@ -546,7 +546,7 @@ function buildApp() {
       </div>
     </div>
   </div>
-</div>`;
+`;
 }
 
 // ── AI ──
