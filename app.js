@@ -11,7 +11,7 @@ const firebaseConfig = {
   messagingSenderId: "594488372191",
   appId: "1:594488372191:web:83f46233b8c4fffe23f26a"
 };
-const APP_VERSION = 'v5.1';
+const APP_VERSION = 'v5.2';
 const COUNTRY_FLAGS = {
   'brasil': '🇧🇷', 'brazil': '🇧🇷',
   'alemanha': '🇩🇪', 'germany': '🇩🇪',
@@ -249,6 +249,7 @@ function buildApp() {
         <div id="ai-btn-wrap" style="display:none;flex-direction:column;gap:8px">
           <button id="btn-ai" style="width:100%;padding:12px;border-radius:12px;border:1px solid #7c3aed55;background:#7c3aed15;color:#c084fc;font-weight:700;font-size:14px;cursor:pointer;font-family:inherit">✨ Identificar com IA</button>
           <button id="btn-crop" data-action="open-crop" style="width:100%;padding:10px;border-radius:12px;border:1px solid ${T.border};background:${T.card2};color:${T.muted};font-weight:700;font-size:13px;cursor:pointer;font-family:inherit">✂️ Ajustar zoom, posição e rotação</button>
+          <button id="btn-opt" data-action="open-photo-opt" style="display:none;width:100%;padding:10px;border-radius:12px;border:1px solid #7c3aed44;background:#7c3aed12;color:#c084fc;font-weight:700;font-size:13px;cursor:pointer;font-family:inherit">✨ Otimizar foto</button>
         </div>
         <input id="inp-cam" type="file" accept="image/*" capture="environment" style="display:none" onchange="loadPhoto(this.files[0]);this.value=''"/>
         <input id="inp-gal" type="file" accept="image/*" style="display:none" onchange="loadPhoto(this.files[0]);this.value=''"/>
