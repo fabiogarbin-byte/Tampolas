@@ -546,7 +546,7 @@ function buildApp() {
       </div>
     </div>
   </div>
-</div>\`;
+</div>`;
 }
 
 // ── AI ──
@@ -743,7 +743,7 @@ async function deleteCap(id) {
   showConfirm({
     icon: '🗑️',
     title: 'Remover tampola?',
-    message: cap ? \`"\${cap.name}" será removida permanentemente da sua coleção.\` : 'Esta tampola será removida permanentemente.',
+    message: cap ? ('"' + cap.name + '" será removida permanentemente da sua coleção.') : 'Esta tampola será removida permanentemente.',
     okLabel: 'Sim, remover',
     okColor: '#ef4444',
     onConfirm: async () => {
