@@ -11,7 +11,7 @@ const firebaseConfig = {
   messagingSenderId: "594488372191",
   appId: "1:594488372191:web:83f46233b8c4fffe23f26a"
 };
-const APP_VERSION = 'v5.0';
+const APP_VERSION = 'v5.1';
 const COUNTRY_FLAGS = {
   'brasil': '🇧🇷', 'brazil': '🇧🇷',
   'alemanha': '🇩🇪', 'germany': '🇩🇪',
@@ -100,9 +100,18 @@ async function loginGoogle() {
   catch(e) { showToast('Erro ao entrar. Tente novamente.','err'); }
 }
 async function logout() {
-  if (unsubCaps) { unsubCaps(); unsubCaps = null; }
-  caps = [];
-  await signOut(auth);
+  showConfirm({
+    icon: '👋',
+    title: 'Sair da conta?',
+    message: 'Você será desconectado. Sua coleção fica salva na nuvem.',
+    okLabel: 'Sim, sair',
+    okColor: '#ef4444',
+    onConfirm: async () => {
+      if (unsubCaps) { unsubCaps(); unsubCaps = null; }
+      caps = [];
+      await signOut(auth);
+    }
+  });
 }
 
 // ── Gemini ──
@@ -522,7 +531,21 @@ function buildApp() {
       <span style="font-size:11px;font-weight:700">Perfil</span>
     </button>
   </div>
-  <div id="toast-el"></div>`;
+  <div id="toast-el"></div>
+
+  <!-- Confirm Modal -->
+  <div id="confirm-modal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.75);z-index:9998;display:none;align-items:center;justify-content:center;padding:32px">
+    <div style="background:#1e1a16;border-radius:20px;padding:28px 24px;width:100%;max-width:340px;border:1px solid #2e2618;box-shadow:0 20px 60px rgba(0,0,0,.6)">
+      <div id="confirm-icon" style="font-size:40px;text-align:center;margin-bottom:14px"></div>
+      <div id="confirm-title" style="font-weight:900;font-size:18px;text-align:center;margin-bottom:8px;color:#fff4e8"></div>
+      <div id="confirm-msg" style="font-size:14px;color:#7a6a58;text-align:center;margin-bottom:24px;line-height:1.5"></div>
+      <div style="display:flex;gap:10px">
+        <button id="confirm-cancel" style="flex:1;padding:14px;border-radius:12px;border:1px solid #2e2618;background:#141210;color:#7a6a58;font-weight:700;font-size:15px;cursor:pointer;font-family:inherit">Cancelar</button>
+        <button id="confirm-ok" style="flex:1;padding:14px;border-radius:12px;border:none;font-weight:800;font-size:15px;cursor:pointer;font-family:inherit"></button>
+      </div>
+    </div>
+  </div>
+</div>\`;
 }
 
 // ── AI ──
@@ -715,9 +738,18 @@ function compressPhoto(dataUrl) {
 }
 
 async function deleteCap(id) {
-  if (!confirm('Remover esta tampola?')) return;
-  try { await dbDelete(id); showToast('Removida.','info'); goTo('list'); }
-  catch(e) { showToast('Erro ao remover.','err'); }
+  const cap = caps.find(c => c.id === id);
+  showConfirm({
+    icon: '🗑️',
+    title: 'Remover tampola?',
+    message: cap ? \`"\${cap.name}" será removida permanentemente da sua coleção.\` : 'Esta tampola será removida permanentemente.',
+    okLabel: 'Sim, remover',
+    okColor: '#ef4444',
+    onConfirm: async () => {
+      try { await dbDelete(id); showToast('Removida.','info'); goTo('list'); }
+      catch(e) { showToast('Erro ao remover.','err'); }
+    }
+  });
 }
 
 // ── Photo / Crop ──
@@ -1773,6 +1805,7 @@ document.addEventListener('click', function(e) {
   const sortVal = el.dataset.sort;
   if (sortVal) { activeSort = sortVal; renderList(); return; }
   if (action === 'check-version') { checkServerVersion(); return; }
+  if (action === 'force-update')  { forceUpdate(); return; }
 
   // Handle id-based buttons
   switch(id) {
@@ -2211,6 +2244,57 @@ function showComparePicker(slot) {
     </div>`).join('');
 }
 
+
+// ── Confirm Modal ──
+function showConfirm({ icon='❓', title, message, okLabel='Confirmar', okColor='#ef4444', onConfirm }) {
+  const modal   = document.getElementById('confirm-modal');
+  const iconEl  = document.getElementById('confirm-icon');
+  const titleEl = document.getElementById('confirm-title');
+  const msgEl   = document.getElementById('confirm-msg');
+  const okBtn   = document.getElementById('confirm-ok');
+  const cancelBtn = document.getElementById('confirm-cancel');
+  if (!modal) return;
+
+  iconEl.textContent  = icon;
+  titleEl.textContent = title;
+  msgEl.textContent   = message;
+  okBtn.textContent   = okLabel;
+  okBtn.style.background = okColor;
+  okBtn.style.color   = '#fff';
+
+  modal.style.display = 'flex';
+
+  const close = () => { modal.style.display = 'none'; okBtn.onclick = null; cancelBtn.onclick = null; };
+  okBtn.onclick     = () => { close(); onConfirm(); };
+  cancelBtn.onclick = () => close();
+}
+
+
+async function forceUpdate() {
+  showConfirm({
+    icon: '⚡',
+    title: 'Forçar atualização?',
+    message: 'O app será recarregado completamente, limpando o cache. Sua coleção não será afetada.',
+    okLabel: 'Sim, atualizar',
+    okColor: '#7c3aed',
+    onConfirm: () => {
+      // Clear caches and hard reload
+      if ('serviceWorker' in navigator) {
+        navigator.serviceWorker.getRegistrations().then(regs => {
+          regs.forEach(r => r.unregister());
+        });
+      }
+      if ('caches' in window) {
+        caches.keys().then(keys => {
+          keys.forEach(k => caches.delete(k));
+        });
+      }
+      // Hard reload with cache bust
+      window.location.href = window.location.pathname + '?nocache=' + Date.now();
+    }
+  });
+}
+
 // ── Boot ──
 document.getElementById('app').innerHTML=`<div style="min-height:100vh;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:14px;background:${T.bg}"><div style="font-size:48px;animation:pulse 1.4s ease infinite">🍺</div><div style="color:${T.muted};font-size:14px;font-family:system-ui">Carregando...</div></div>`;
 
@@ -2228,6 +2312,6 @@ window.checkDuplicate=checkDuplicate; window.loadPhoto=loadPhoto;
 window.openCrop=openCrop; window.confirmCrop=confirmCrop; window.drawCrop=drawCrop;
 window.cropDown=cropDown; window.cropMove=cropMove; window.cropUp=cropUp;
 window.updatePhotoThumb=updatePhotoThumb; window.renderList=renderList;
-window.openLightbox=openLightbox; window.exportPDF=exportPDF; window.openCompare=openCompare; window.renderCompare=renderCompare; window.showComparePicker=showComparePicker; window.saveGeminiKey=saveGeminiKey; window.openPhotoOpt=openPhotoOpt; window.applyOptFilters=applyOptFilters; window.drawOptPreview=drawOptPreview; window.aiOptimizePhoto=aiOptimizePhoto; window.checkServerVersion=checkServerVersion; window.renderStats=renderStats; window.searchByPhoto=searchByPhoto; window.loadPsPhoto=loadPsPhoto; window.renderAchievements=renderAchievements; window.renderMap=renderMap; window.openMuseum=openMuseum; window.shareCap=shareCap; window.loadGeminiKey=loadGeminiKey; window.triggerCamera=triggerCamera; window.triggerGallery=triggerGallery; window.renderProfile=renderProfile; window.updateNavAvatar=updateNavAvatar; window.renderSettings=renderSettings;
+window.openLightbox=openLightbox; window.showConfirm=showConfirm; window.forceUpdate=forceUpdate; window.exportPDF=exportPDF; window.openCompare=openCompare; window.renderCompare=renderCompare; window.showComparePicker=showComparePicker; window.saveGeminiKey=saveGeminiKey; window.openPhotoOpt=openPhotoOpt; window.applyOptFilters=applyOptFilters; window.drawOptPreview=drawOptPreview; window.aiOptimizePhoto=aiOptimizePhoto; window.checkServerVersion=checkServerVersion; window.renderStats=renderStats; window.searchByPhoto=searchByPhoto; window.loadPsPhoto=loadPsPhoto; window.renderAchievements=renderAchievements; window.renderMap=renderMap; window.openMuseum=openMuseum; window.shareCap=shareCap; window.loadGeminiKey=loadGeminiKey; window.triggerCamera=triggerCamera; window.triggerGallery=triggerGallery; window.renderProfile=renderProfile; window.updateNavAvatar=updateNavAvatar; window.renderSettings=renderSettings;
 window.rotateCrop=rotateCrop; window.rotateCropTo=rotateCropTo; window.resetCrop=resetCrop;
 window.runAI=runAI; window.applyAI=applyAI; window.dismissAI=dismissAI;
