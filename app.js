@@ -39,7 +39,6 @@ const COUNTRY_FLAGS = {
   'peru': '🇵🇪',
   'uruguai': '🇺🇾', 'uruguay': '🇺🇾',
   'áfrica do sul': '🇿🇦', 'south africa': '🇿🇦',
-  'china': '🇨🇳',
   'coreia': '🇰🇷', 'korea': '🇰🇷',
   'tailândia': '🇹🇭', 'thailand': '🇹🇭',
   'cuba': '🇨🇺',
