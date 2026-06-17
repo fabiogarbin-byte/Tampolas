@@ -11,7 +11,7 @@ const firebaseConfig = {
   messagingSenderId: "594488372191",
   appId: "1:594488372191:web:83f46233b8c4fffe23f26a"
 };
-const APP_VERSION = 'v5.2';
+const APP_VERSION = 'v5.3';
 const COUNTRY_FLAGS = {
   'brasil': '🇧🇷', 'brazil': '🇧🇷',
   'alemanha': '🇩🇪', 'germany': '🇩🇪',
@@ -1703,7 +1703,12 @@ document.addEventListener('click', function(e) {
     case 'reset-crop':   resetCrop(); return;
     case 'save-key':     saveGeminiKey(); return;
     case 'logout':       logout(); return;
-    case 'remove-photo': pendingPhoto=null; pendingPhotoBase64=null; originalPhotoBase64=null; updatePhotoThumb(); return;
+    case 'remove-photo':      pendingPhoto=null; pendingPhotoBase64=null; originalPhotoBase64=null; updatePhotoThumb(); return;
+    case 'open-photo-opt':    openPhotoOpt(); return;
+    case 'ai-optimize-photo': aiOptimizePhoto(); return;
+    case 'opt-reset':         optFilters={brightness:100,contrast:100,saturation:100,sharpness:0,dehaze:0}; document.querySelectorAll('[data-opt]').forEach(s=>{const k=s.dataset.opt.replace('opt-','');const def={brightness:100,contrast:100,saturation:100,sharpness:0,dehaze:0};s.value=def[k]??100;const v=document.getElementById(s.dataset.opt+'-val');if(v)v.textContent=s.value+(parseFloat(s.max)<=5?'':' %');}); drawOptPreview(); return;
+    case 'opt-confirm':       applyOptFilters(); return;
+    case 'back-from-opt':     goTo('add'); return;
   }
 
   // data-action with dynamic id
@@ -1729,9 +1734,6 @@ document.addEventListener('click', function(e) {
   }
   if (action === 'goto-achievements') { goTo('achievements'); renderAchievements(); return; }
   if (action === 'goto-map')         { goTo('map'); renderMap(); return; }
-  if (action === 'open-photo-opt')  { openPhotoOpt(); return; }
-  if (action === 'ai-optimize-photo') { aiOptimizePhoto(); return; }
-  if (action === 'back-from-opt')   { goTo('add'); return; }
   if (action === 'opt-reset') {
     optFilters = {brightness:100,contrast:100,saturation:100,sharpness:0};
     document.querySelectorAll('[data-opt]').forEach(s => {
@@ -1898,21 +1900,34 @@ function drawOptPreview() {
 }
 
 function applyOptFilters() {
-  const canvas = document.getElementById('opt-canvas');
-  if (!canvas) return;
-  // render to new canvas with filters baked in
-  const out = document.createElement('canvas');
-  out.width = canvas.width; out.height = canvas.height;
-  const ctx = out.getContext('2d');
-  ctx.filter = canvas.style.filter || 'none';
-  ctx.beginPath(); ctx.arc(canvas.width/2,canvas.height/2,canvas.width/2,0,Math.PI*2); ctx.clip();
-  ctx.drawImage(canvas, 0, 0);
-  pendingPhoto = out.toDataURL('image/jpeg', 0.85);
-  pendingPhotoBase64 = pendingPhoto.split(',')[1];
-  pendingPhotoMime = 'image/jpeg';
-  updatePhotoThumb();
-  showToast('Foto otimizada!', 'ok');
-  goTo('add');
+  if (!pendingPhoto) return;
+  // Re-draw from original photo with filters baked in via CSS filter on canvas
+  const img = new Image();
+  img.onload = () => {
+    const size = Math.min(img.width, img.height);
+    const out = document.createElement('canvas');
+    out.width = size; out.height = size;
+    const ctx = out.getContext('2d');
+
+    // Build filter string
+    const sharp  = optFilters.sharpness || 0;
+    const dehaze = optFilters.dehaze    || 0;
+    let filter = `brightness(${optFilters.brightness}%) contrast(${optFilters.contrast}%) saturate(${optFilters.saturation}%)`;
+    if (sharp  > 0) filter += ` contrast(${100 + sharp * 12}%)`;
+    if (dehaze > 0) filter += ` brightness(${100 - dehaze*0.25}%) contrast(${100 + dehaze*0.4}%)`;
+
+    ctx.filter = filter;
+    ctx.beginPath(); ctx.arc(size/2, size/2, size/2, 0, Math.PI*2); ctx.clip();
+    ctx.drawImage(img, (img.width-size)/2, (img.height-size)/2, size, size, 0, 0, size, size);
+
+    pendingPhoto      = out.toDataURL('image/jpeg', 0.85);
+    pendingPhotoBase64= pendingPhoto.split(',')[1];
+    pendingPhotoMime  = 'image/jpeg';
+    updatePhotoThumb();
+    showToast('Foto otimizada!', 'ok');
+    goTo('add');
+  };
+  img.src = pendingPhoto;
 }
 
 
