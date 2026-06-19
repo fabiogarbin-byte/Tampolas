@@ -11,7 +11,7 @@ const firebaseConfig = {
   messagingSenderId: "594488372191",
   appId: "1:594488372191:web:83f46233b8c4fffe23f26a"
 };
-const APP_VERSION = 'v5.6';
+const APP_VERSION = 'v5.7';
 const COUNTRY_FLAGS = {
   'brasil': '🇧🇷', 'brazil': '🇧🇷',
   'alemanha': '🇩🇪', 'germany': '🇩🇪',
@@ -386,7 +386,10 @@ function buildApp() {
           <span style="font-size:13px;color:${T.muted}">No servidor (GitHub)</span>
           <span id="profile-version-server" style="font-size:13px;font-weight:700;color:${T.muted}">-</span>
         </div>
-        <button data-action="check-version" style="width:100%;padding:10px;border-radius:10px;border:1px solid ${T.border};background:${T.card2};color:${T.muted};font-size:13px;font-weight:700;cursor:pointer;font-family:inherit">🔄 Verificar atualização</button>
+        <div style="display:flex;gap:8px">
+          <button data-action="check-version" style="flex:1;padding:10px;border-radius:10px;border:1px solid ${T.border};background:${T.card2};color:${T.muted};font-size:13px;font-weight:700;cursor:pointer;font-family:inherit">🔄 Verificar</button>
+          <button data-action="force-update" style="flex:1;padding:10px;border-radius:10px;border:1px solid #7c3aed44;background:#7c3aed15;color:#c084fc;font-size:13px;font-weight:700;cursor:pointer;font-family:inherit">⚡ Forçar update</button>
+        </div>
       </div>
 
       <!-- Logout -->
