@@ -11,7 +11,7 @@ const firebaseConfig = {
   messagingSenderId: "594488372191",
   appId: "1:594488372191:web:83f46233b8c4fffe23f26a"
 };
-const APP_VERSION = 'v5.7';
+const APP_VERSION = 'v5.8';
 const COUNTRY_FLAGS = {
   'brasil': '🇧🇷', 'brazil': '🇧🇷',
   'alemanha': '🇩🇪', 'germany': '🇩🇪',
@@ -1652,7 +1652,7 @@ function renderMap() {
   `;
 }
 
-function shareCap(cap) {
+async function shareCap(cap) {
   // Generate share card as canvas
   const canvas = document.createElement('canvas');
   canvas.width = 600; canvas.height = 600;
