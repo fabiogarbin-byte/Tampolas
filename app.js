@@ -11,7 +11,7 @@ const firebaseConfig = {
   messagingSenderId: "594488372191",
   appId: "1:594488372191:web:83f46233b8c4fffe23f26a"
 };
-const APP_VERSION = 'v5.8';
+const APP_VERSION = 'v5.9';
 const COUNTRY_FLAGS = {
   'brasil': '🇧🇷', 'brazil': '🇧🇷',
   'alemanha': '🇩🇪', 'germany': '🇩🇪',
@@ -76,6 +76,7 @@ let originalPhotoBase64 = null, originalPhotoMime = null;
 let aiData = null, aiLoading = false;
 let cropSrc = null, cropScale = 1, cropX = 0, cropY = 0, cropRotate = 0;
 let cropDragging = false, cropLastX = 0, cropLastY = 0, cropPinchDist = 0;
+let cropGridVisible = false;
 
 // ── Firestore ──
 const capsCol  = ()       => collection(db, 'users', currentUser.uid, 'caps');
@@ -301,13 +302,19 @@ function buildApp() {
   <div id="scr-crop" class="screen" style="display:none;padding-bottom:40px">
     <div style="padding:52px 16px 14px;display:flex;align-items:center;gap:12px">
       <button data-action="goto-add" style="${btnIconStyle()}">←</button>
-      <div style="font-weight:800;font-size:18px">Ajustar Foto</div>
+      <div style="flex:1;font-weight:800;font-size:18px">Ajustar Foto</div>
+      <button id="btn-grid-toggle" data-action="toggle-grid" style="background:${T.card};border:1px solid ${T.border};color:${T.muted};border-radius:10px;width:38px;height:38px;cursor:pointer;font-size:16px;display:flex;align-items:center;justify-content:center">⊹</button>
     </div>
     <div style="font-size:12px;color:${T.muted};margin-bottom:14px;text-align:center;padding:0 16px">
       Arraste para mover · Belisque para zoom · Use o controle para girar
     </div>
     <div style="display:flex;justify-content:center">
-      <div id="crop-wrap" style="border-radius:50%;overflow:hidden;border:3px solid ${O}"></div>
+      <div id="crop-wrap" style="border-radius:50%;overflow:hidden;border:3px solid ${O};position:relative">
+        <div id="crop-grid" style="display:none;position:absolute;inset:0;pointer-events:none;z-index:5">
+          <div style="position:absolute;left:50%;top:0;bottom:0;width:0;border-left:1.5px dashed rgba(255,255,255,.55);transform:translateX(-50%)"></div>
+          <div style="position:absolute;top:50%;left:0;right:0;height:0;border-top:1.5px dashed rgba(255,255,255,.55);transform:translateY(-50%)"></div>
+        </div>
+      </div>
     </div>
     <img id="crop-img" style="display:none" onload="drawCrop()"/>
 
@@ -795,14 +802,33 @@ function openCropScreen(src) {
   const SIZE=Math.min(window.innerWidth,480)-48;
   const wrap=document.getElementById('crop-wrap');
   wrap.style.width=SIZE+'px'; wrap.style.height=SIZE+'px';
+  // canvas goes first, grid overlay div stays on top (already in DOM, re-append after canvas)
+  const gridDiv = document.getElementById('crop-grid');
   wrap.innerHTML=`<canvas id="crop-canvas" width="${SIZE}" height="${SIZE}"
     style="width:${SIZE}px;height:${SIZE}px;display:block;touch-action:none;cursor:grab"
     ontouchstart="cropDown(event)" ontouchmove="cropMove(event)" ontouchend="cropUp()"
     onmousedown="cropDown(event)" onmousemove="cropMove(event)" onmouseup="cropUp()"></canvas>`;
+  // re-add grid overlay on top of the new canvas
+  const newGrid = document.createElement('div');
+  newGrid.id = 'crop-grid';
+  newGrid.style.cssText = 'display:'+(cropGridVisible?'block':'none')+';position:absolute;inset:0;pointer-events:none;z-index:5';
+  newGrid.innerHTML = `
+    <div style="position:absolute;left:50%;top:0;bottom:0;width:0;border-left:1.5px dashed rgba(255,255,255,.55);transform:translateX(-50%)"></div>
+    <div style="position:absolute;top:50%;left:0;right:0;height:0;border-top:1.5px dashed rgba(255,255,255,.55);transform:translateY(-50%)"></div>`;
+  wrap.appendChild(newGrid);
+
   document.getElementById('crop-img').src=src;
   document.getElementById('zoom-slider').value=1;
   document.getElementById('rotate-slider').value=0;
   document.getElementById('rotate-label').textContent='0°';
+
+  const btn = document.getElementById('btn-grid-toggle');
+  if (btn) {
+    btn.style.color = cropGridVisible ? '#ff8c00' : '#7a6a58';
+    btn.style.borderColor = cropGridVisible ? '#ff8c0055' : '#2e2618';
+    btn.style.background = cropGridVisible ? '#ff8c0015' : '#1e1a16';
+  }
+
   goTo('crop');
 }
 
@@ -914,6 +940,19 @@ function triggerCamera() {
 function triggerGallery() {
   const el = document.getElementById('inp-gal');
   if (el) { el.value = ''; el.click(); }
+}
+
+
+function toggleCropGrid() {
+  cropGridVisible = !cropGridVisible;
+  const grid = document.getElementById('crop-grid');
+  const btn  = document.getElementById('btn-grid-toggle');
+  if (grid) grid.style.display = cropGridVisible ? 'block' : 'none';
+  if (btn) {
+    btn.style.color = cropGridVisible ? '#ff8c00' : '#7a6a58';
+    btn.style.borderColor = cropGridVisible ? '#ff8c0055' : '#2e2618';
+    btn.style.background = cropGridVisible ? '#ff8c0015' : '#1e1a16';
+  }
 }
 
 function cropDown(e) {
@@ -1784,9 +1823,10 @@ document.addEventListener('click', function(e) {
     case 'camera':       triggerCamera(); return;
     case 'gallery':      triggerGallery(); return;
     case 'open-crop':    openCrop(); return;
-    case 'rotate-left':  rotateCrop(-15); return;
-    case 'rotate-right': rotateCrop(15); return;
+    case 'rotate-left':  rotateCrop(-1); return;
+    case 'rotate-right': rotateCrop(1); return;
     case 'reset-crop':   resetCrop(); return;
+    case 'toggle-grid':  toggleCropGrid(); return;
     case 'save-key':     saveGeminiKey(); return;
     case 'logout':       logout(); return;
     case 'remove-photo':      pendingPhoto=null; pendingPhotoBase64=null; originalPhotoBase64=null; updatePhotoThumb(); return;
