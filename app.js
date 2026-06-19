@@ -11,7 +11,7 @@ const firebaseConfig = {
   messagingSenderId: "594488372191",
   appId: "1:594488372191:web:83f46233b8c4fffe23f26a"
 };
-const APP_VERSION = 'v5.3';
+const APP_VERSION = 'v5.6';
 const COUNTRY_FLAGS = {
   'brasil': '🇧🇷', 'brazil': '🇧🇷',
   'alemanha': '🇩🇪', 'germany': '🇩🇪',
@@ -206,8 +206,11 @@ function buildApp() {
         style="width:100%;background:${T.card2};border:1.5px solid ${T.border};color:${T.text};border-radius:12px;padding:11px 14px 11px 40px;font-size:15px;outline:none;font-family:inherit;box-sizing:border-box"/>
     </div>
 
-    <!-- Filter chips -->
-    <div style="padding:0 16px 8px;display:flex;gap:6px;overflow-x:auto;scrollbar-width:none">
+    <!-- Filtro -->
+    <div style="padding:0 16px 4px">
+      <span style="font-size:11px;color:${T.muted};font-weight:700;white-space:nowrap">Filtro:</span>
+    </div>
+    <div style="padding:0 16px 10px;display:flex;gap:6px;overflow-x:auto;scrollbar-width:none">
       <button data-action="filter-all" style="flex-shrink:0;padding:6px 14px;border-radius:20px;border:1.5px solid #ff8c0055;background:#ff8c0020;color:#ff8c00;font-size:12px;font-weight:700;cursor:pointer;font-family:inherit">Todas</button>
       <div id="filter-chips" style="display:flex;gap:6px"></div>
     </div>
@@ -216,7 +219,7 @@ function buildApp() {
     <div style="padding:0 16px 10px;display:flex;gap:6px;align-items:center">
       <span style="font-size:11px;color:${T.muted};font-weight:700;white-space:nowrap">Ordenar:</span>
       <div style="display:flex;gap:4px;overflow-x:auto;scrollbar-width:none">
-        ${['recent','az','country','brand','rarity'].map(s=>`<button data-sort="${s}" style="flex-shrink:0;padding:5px 10px;border-radius:8px;border:1px solid ${T.border};background:${T.card2};color:${T.muted};font-size:11px;font-weight:700;cursor:pointer;font-family:inherit">${{recent:'🕐 Recente',az:'🔤 A-Z',country:'🌍 País',brand:'🏷️ Marca',rarity:'⭐ Raridade'}[s]}</button>`).join('')}
+        ${['recent','az','country','color','rarity'].map(s=>`<button data-sort="${s}" style="flex-shrink:0;padding:5px 10px;border-radius:8px;border:1px solid ${T.border};background:${T.card2};color:${T.muted};font-size:11px;font-weight:700;cursor:pointer;font-family:inherit">${{recent:'🕐 Recente',az:'🔤 A-Z',country:'🌍 País',color:'🎨 Cor',rarity:'⭐ Raridade'}[s]}</button>`).join('')}
       </div>
     </div>
 
@@ -280,6 +283,11 @@ function buildApp() {
           <option value="muito_rara">🟠 Muito Rara</option>
           <option value="unica">🔴 Única / Especial</option>
         </select>
+      </div>
+
+      <div>
+        <div style="${lblStyle()}">Data de inclusão</div>
+        <input id="f-date" type="date" style="${inpStyle()};color-scheme:dark"/>
       </div>
 
       <button id="btn-save" style="width:100%;padding:16px;border-radius:14px;border:none;background:linear-gradient(135deg,${O},#c05500);color:#fff;font-weight:800;font-size:16px;cursor:pointer;font-family:inherit;box-shadow:0 6px 20px ${O}40;margin-bottom:8px">SALVAR TAMPOLA</button>
@@ -647,6 +655,7 @@ function openAdd() {
   document.getElementById('add-title').textContent='Nova Tampola';
   const bsave = document.getElementById('btn-save');
   if (bsave) { bsave.textContent='SALVAR TAMPOLA'; bsave.disabled=false; }
+  const dEl = document.getElementById('f-date'); if (dEl) dEl.value = todayISO();
   resetForm(); updatePhotoThumb(); goTo('add');
 }
 
@@ -663,6 +672,7 @@ function openEdit(cap) {
   document.getElementById('f-country').value = cap.country ||'';
   document.getElementById('f-notes').value   = cap.notes   ||'';
   const rEl=document.getElementById('f-rarity'); if(rEl) rEl.value=cap.rarity||'normal';
+  const dEl=document.getElementById('f-date'); if(dEl) dEl.value=cap.dateISO||todayISO();
   document.getElementById('dup-alert').style.display='none';
   const aiRes=document.getElementById('ai-result'); if(aiRes) aiRes.style.display='none';
   updatePhotoThumb(); goTo('add');
@@ -679,6 +689,7 @@ function getFormValues() {
     country: (document.getElementById('f-country')?.value ||'').trim(),
     notes:   (document.getElementById('f-notes')?.value   ||'').trim(),
     rarity:  document.getElementById('f-rarity')?.value || 'normal',
+    dateISO: document.getElementById('f-date')?.value || todayISO(),
     photo:   pendingPhoto,
   };
 }
@@ -701,10 +712,12 @@ async function saveCap() {
       form.photo = await compressPhoto(form.photo);
     }
     if (editingId) {
+      form.addedAt = formatDateBR(form.dateISO);
       await dbUpdate(editingId, form); clearTimeout(timeout);
       showToast('Atualizada!');
       currentCapId=editingId; editingId=null; goTo('detail');
     } else {
+      form.addedAt = formatDateBR(form.dateISO);
       await dbAdd(form); clearTimeout(timeout);
       showToast('Tampola adicionada!');
       editingId=null; goTo('list');
@@ -1003,7 +1016,7 @@ function getFilteredSorted() {
   // Sort
   if (activeSort === 'az')      result.sort((a,b) => a.name.localeCompare(b.name));
   if (activeSort === 'country') result.sort((a,b) => (a.country||'').localeCompare(b.country||''));
-  if (activeSort === 'brand')   result.sort((a,b) => (a.brand||'').localeCompare(b.brand||''));
+  if (activeSort === 'color')   result.sort((a,b) => (a.color||'').localeCompare(b.color||''));
   if (activeSort === 'rarity') {
     const order = {unica:0, muito_rara:1, rara:2, normal:3};
     result.sort((a,b) => (order[a.rarity||'normal']||3) - (order[b.rarity||'normal']||3));
@@ -1015,11 +1028,12 @@ function getFilteredSorted() {
 function renderFilterChips() {
   const el = document.getElementById('filter-chips');
   if (!el) return;
+  const rarityLabels = {normal:'⚪ Normal',rara:'🟡 Rara',muito_rara:'🟠 Muito Rara',unica:'🔴 Única'};
   const filters = [
     ...[ ...new Set(caps.map(c=>c.country).filter(Boolean)) ].map(v=>({ type:'country', value:v, label: countryFlag(v)+' '+v })),
-    ...[ ...new Set(caps.map(c=>c.type).filter(Boolean))    ].map(v=>({ type:'type',    value:v, label:'🥤 '+v })),
     ...[ ...new Set(caps.map(c=>c.color).filter(Boolean))   ].map(v=>({ type:'color',   value:v, label:'🎨 '+v })),
-    ...[ ...new Set(caps.map(c=>c.brand).filter(Boolean))   ].map(v=>({ type:'brand',   value:v, label:'🏷️ '+v })),
+    ...[ ...new Set(caps.map(c=>c.type).filter(Boolean))    ].map(v=>({ type:'type',    value:v, label:'🥤 '+v })),
+    ...[ ...new Set(caps.map(c=>c.rarity).filter(v=>v&&v!=='normal')) ].map(v=>({ type:'rarity', value:v, label: rarityLabels[v] })),
   ];
   el.innerHTML = filters.map(f => {
     const active = activeFilter.type===f.type && activeFilter.value===f.value;
@@ -1037,6 +1051,18 @@ function updateSortButtons() {
   });
 }
 
+function groupKeyFor(cap) {
+  if (activeSort === 'country') return cap.country || 'Sem país';
+  if (activeSort === 'color')   return cap.color   || 'Sem cor';
+  if (activeSort === 'rarity')  return {normal:'⚪ Normal',rara:'🟡 Rara',muito_rara:'🟠 Muito Rara',unica:'🔴 Única'}[cap.rarity||'normal'];
+  return null; // no grouping for 'recent' and 'az'
+}
+
+function groupIconFor(key) {
+  if (activeSort === 'country' && key !== 'Sem país') return countryFlag(key) + ' ';
+  return '';
+}
+
 function renderList() {
   const el  = document.getElementById('list-items');
   const cnt = document.getElementById('list-count');
@@ -1051,11 +1077,40 @@ function renderList() {
     return;
   }
 
-  if (listView === 'grid') {
-    el.innerHTML = `<div style="display:grid;grid-template-columns:repeat(3,1fr);gap:8px;padding:0 16px">${filtered.map(c => capGridHTML(c)).join('')}</div>`;
-  } else {
-    el.innerHTML = filtered.map(c => capRowHTML(c)).join('');
+  const groupable = ['country', 'color', 'rarity'].includes(activeSort);
+
+  if (!groupable) {
+    // No grouping — render flat (recent / az)
+    if (listView === 'grid') {
+      el.innerHTML = `<div style="display:grid;grid-template-columns:repeat(3,1fr);gap:8px;padding:0 16px">${filtered.map(c => capGridHTML(c)).join('')}</div>`;
+    } else {
+      el.innerHTML = filtered.map(c => capRowHTML(c)).join('');
+    }
+    return;
   }
+
+  // Grouped rendering with section dividers
+  const groups = {};
+  filtered.forEach(c => {
+    const key = groupKeyFor(c);
+    if (!groups[key]) groups[key] = [];
+    groups[key].push(c);
+  });
+
+  const groupKeys = Object.keys(groups).sort((a,b) => groups[b].length - groups[a].length);
+
+  el.innerHTML = groupKeys.map(key => {
+    const items = groups[key];
+    const header = `<div style="padding:14px 16px 8px;display:flex;align-items:center;gap:8px">
+      <div style="font-size:13px;font-weight:800;color:#ffaa33;letter-spacing:.5px">${groupIconFor(key)}${key}</div>
+      <div style="flex:1;height:1px;background:#2e2618"></div>
+      <div style="font-size:11px;color:#7a6a58;font-weight:700">${items.length}</div>
+    </div>`;
+    const body = listView === 'grid'
+      ? `<div style="display:grid;grid-template-columns:repeat(3,1fr);gap:8px;padding:0 16px 4px">${items.map(c => capGridHTML(c)).join('')}</div>`
+      : items.map(c => capRowHTML(c)).join('');
+    return header + body;
+  }).join('');
 }
 
 function rarityBadge(cap) {
@@ -1102,7 +1157,7 @@ function openDetail(id) { currentCapId=id; renderDetail(id); goTo('detail'); }
 
 function renderDetail(id) {
   const cap=caps.find(c=>c.id===id); if(!cap) return;
-  const fields=[['🏷️ Marca',cap.brand],['🥤 Tipo',cap.type],['🎨 Cor',cap.color],['📍 País',cap.country],['⭐ Raridade',{normal:'⚪ Normal',rara:'🟡 Rara',muito_rara:'🟠 Muito Rara',unica:'🔴 Única'}[cap.rarity||'normal']],['📅 Adicionada',cap.addedAt]].filter(([,v])=>v);
+  const fields=[['🏷️ Marca',cap.brand],['🥤 Tipo',cap.type],['🎨 Cor',cap.color],['📍 País',cap.country],['⭐ Raridade',{normal:'⚪ Normal',rara:'🟡 Rara',muito_rara:'🟠 Muito Rara',unica:'🔴 Única'}[cap.rarity||'normal']],['📅 Adicionada',cap.dateISO ? formatDateBR(cap.dateISO) : cap.addedAt]].filter(([,v])=>v);
   const el=document.getElementById('scr-detail'); if(!el) return;
   el.innerHTML=`
     <div style="position:relative;height:280px;overflow:hidden">
@@ -1508,65 +1563,93 @@ function renderMap() {
   const el = document.getElementById('map-content');
   if (!el) return;
 
-  // get countries with counts
   const countryMap = {};
   caps.forEach(c => {
-    const k = (c.country||'').trim().toLowerCase();
+    const k = (c.country||'').trim();
     if (k) countryMap[k] = (countryMap[k]||0) + 1;
   });
 
-  const hasCountry = Object.keys(countryMap).length > 0;
+  const countries = Object.entries(countryMap).sort((a,b)=>b[1]-a[1]);
+  const hasCountry = countries.length > 0;
 
-  // SVG world map (simplified mercator projection)
-  // Convert lat/lng to x,y in a 800x400 SVG
-  function toXY(lat, lng) {
-    const x = (lng + 180) * (800/360);
-    const y = (90 - lat) * (400/180);
-    return [x, y];
+  // Continent grouping
+  const CONTINENTS = {
+    'América do Sul': ['brasil','argentina','colômbia','chile','peru','uruguai','venezuela','equador','bolívia','paraguai'],
+    'América do Norte': ['estados unidos','eua','usa','canadá','méxico','mexico'],
+    'América Central/Caribe': ['cuba','jamaica','panamá','costa rica','república dominicana'],
+    'Europa': ['alemanha','espanha','frança','itália','portugal','holanda','bélgica','irlanda','reino unido','rússia','dinamarca','suécia','noruega','república tcheca','suíça','escócia','áustria','polônia','grécia'],
+    'Ásia': ['china','japão','coreia','tailândia','índia','vietnã','indonésia'],
+    'África': ['áfrica do sul','egito','marrocos','nigéria'],
+    'Oceania': ['austrália','nova zelândia'],
+  };
+
+  function getContinent(country) {
+    const lc = country.toLowerCase();
+    for (const [cont, list] of Object.entries(CONTINENTS)) {
+      if (list.includes(lc)) return cont;
+    }
+    return 'Outros';
   }
 
-  const dots = Object.entries(countryMap).map(([country, count]) => {
-    const coords = COUNTRY_COORDS[country];
-    if (!coords) return '';
-    const [x, y] = toXY(coords[0], coords[1]);
-    const r = Math.min(6 + count * 2, 16);
-    const flag = countryFlag(country);
-    return `<g>
-      <circle cx="${x}" cy="${y}" r="${r+4}" fill="#ff8c00" opacity="0.2"/>
-      <circle cx="${x}" cy="${y}" r="${r}" fill="#ff8c00" opacity="0.9"/>
-      <text x="${x}" y="${y+4}" text-anchor="middle" font-size="10" fill="white" font-weight="bold">${count}</text>
-    </g>`;
-  }).join('');
+  const continentGroups = {};
+  countries.forEach(([country, count]) => {
+    const cont = getContinent(country);
+    if (!continentGroups[cont]) continentGroups[cont] = [];
+    continentGroups[cont].push([country, count]);
+  });
 
-  const countries = Object.entries(countryMap).sort((a,b)=>b[1]-a[1]);
+  const continentIcons = {
+    'América do Sul': '🌎', 'América do Norte': '🌎', 'América Central/Caribe': '🌎',
+    'Europa': '🌍', 'Ásia': '🌏', 'África': '🌍', 'Oceania': '🌏', 'Outros': '🌐',
+  };
+
+  // Summary cards
+  const totalCountries = countries.length;
+  const totalContinents = Object.keys(continentGroups).filter(c => c !== 'Outros' || continentGroups[c].length).length;
 
   el.innerHTML = `
-    <div style="background:#1e1a16;border-radius:16px;overflow:hidden;border:1px solid #2e2618;margin-bottom:14px">
-      <svg viewBox="0 0 800 400" style="width:100%;display:block;background:#0d1117">
-        <!-- Simple world outline dots -->
-        <text x="400" y="200" text-anchor="middle" font-size="120" opacity="0.04" fill="#fff4e8">🌍</text>
-        <!-- Grid lines -->
-        <line x1="0" y1="200" x2="800" y2="200" stroke="#2e2618" stroke-width="0.5"/>
-        <line x1="400" y1="0" x2="400" y2="400" stroke="#2e2618" stroke-width="0.5"/>
-        <!-- Country dots -->
-        ${dots}
-      </svg>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:14px">
+      <div style="background:#1e1a16;border-radius:16px;padding:16px;border:1px solid #2e2618;text-align:center">
+        <div style="font-size:32px;font-weight:900;color:#ffaa33">${totalCountries}</div>
+        <div style="font-size:11px;color:#7a6a58;font-weight:700;margin-top:2px">PAÍSES</div>
+      </div>
+      <div style="background:#1e1a16;border-radius:16px;padding:16px;border:1px solid #2e2618;text-align:center">
+        <div style="font-size:32px;font-weight:900;color:#ffaa33">${totalContinents}</div>
+        <div style="font-size:11px;color:#7a6a58;font-weight:700;margin-top:2px">CONTINENTES</div>
+      </div>
     </div>
-    <div style="background:#1e1a16;border-radius:16px;padding:16px;border:1px solid #2e2618">
-      <div style="font-size:13px;font-weight:700;color:#7a6a58;letter-spacing:1px;text-transform:uppercase;margin-bottom:12px">Países na coleção</div>
-      ${hasCountry
-        ? countries.map(([c,n]) => `<div style="display:flex;justify-content:space-between;align-items:center;padding:8px 0;border-bottom:1px solid #252018">
-            <span style="font-size:14px">${countryFlag(c)} ${c.charAt(0).toUpperCase()+c.slice(1)}</span>
-            <span style="font-size:13px;font-weight:700;color:#ffaa33">${n} tampola${n>1?'s':''}</span>
-          </div>`).join('')
-        : '<div style="text-align:center;color:#3a3028;padding:20px">Nenhum país cadastrado ainda</div>'
-      }
-    </div>`;
+
+    ${hasCountry ? Object.entries(continentGroups).sort((a,b)=>b[1].length-a[1].length).map(([cont, list]) => `
+      <div style="background:#1e1a16;border-radius:16px;padding:16px;border:1px solid #2e2618;margin-bottom:10px">
+        <div style="display:flex;align-items:center;gap:8px;margin-bottom:12px">
+          <span style="font-size:20px">${continentIcons[cont]||'🌐'}</span>
+          <span style="font-size:14px;font-weight:800;color:#fff4e8">${cont}</span>
+          <div style="flex:1;height:1px;background:#2e2618"></div>
+          <span style="font-size:11px;color:#7a6a58;font-weight:700">${list.reduce((s,[,n])=>s+n,0)} tampolas</span>
+        </div>
+        ${list.sort((a,b)=>b[1]-a[1]).map(([country, count]) => {
+          const pct = Math.round(count / caps.length * 100);
+          return `<div style="margin-bottom:8px">
+            <div style="display:flex;justify-content:space-between;margin-bottom:3px">
+              <span style="font-size:13px">${countryFlag(country)} ${country}</span>
+              <span style="font-size:12px;font-weight:700;color:#ffaa33">${count}</span>
+            </div>
+            <div style="height:5px;background:#252018;border-radius:5px;overflow:hidden">
+              <div style="height:100%;width:${pct}%;background:linear-gradient(90deg,#ff8c00,#ffaa33);border-radius:5px"></div>
+            </div>
+          </div>`;
+        }).join('')}
+      </div>
+    `).join('') : `
+      <div style="text-align:center;padding:48px 24px;color:#3a3028">
+        <div style="font-size:48px;margin-bottom:12px">🗺️</div>
+        <div style="font-size:14px;line-height:1.6">Nenhum país cadastrado ainda.<br>Adicione o país de origem das suas tampolas!</div>
+      </div>
+    `}
+  `;
 }
 
-
-// ── Compartilhar ──
-async function shareCap(cap) {
+function shareCap(cap) {
   // Generate share card as canvas
   const canvas = document.createElement('canvas');
   canvas.width = 600; canvas.height = 600;
@@ -2308,6 +2391,21 @@ async function forceUpdate() {
       window.location.href = window.location.pathname + '?nocache=' + Date.now();
     }
   });
+}
+
+
+function todayISO() {
+  const d = new Date();
+  const y = d.getFullYear();
+  const m = String(d.getMonth()+1).padStart(2,'0');
+  const day = String(d.getDate()).padStart(2,'0');
+  return `${y}-${m}-${day}`;
+}
+
+function formatDateBR(iso) {
+  if (!iso) return '';
+  const [y,m,d] = iso.split('-');
+  return `${d}/${m}/${y}`;
 }
 
 // ── Boot ──
