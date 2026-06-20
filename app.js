@@ -11,7 +11,7 @@ const firebaseConfig = {
   messagingSenderId: "594488372191",
   appId: "1:594488372191:web:83f46233b8c4fffe23f26a"
 };
-const APP_VERSION = 'v5.9';
+const APP_VERSION = 'v6.0';
 const COUNTRY_FLAGS = {
   'brasil': '🇧🇷', 'brazil': '🇧🇷',
   'alemanha': '🇩🇪', 'germany': '🇩🇪',
@@ -46,6 +46,7 @@ const COUNTRY_FLAGS = {
   'escócia': '🏴󠁧󠁢󠁳󠁣󠁴󠁿', 'scotland': '🏴󠁧󠁢󠁳󠁣󠁴󠁿',
   'frança': '🇫🇷', 'france': '🇫🇷',
   'suíça': '🇨🇭', 'switzerland': '🇨🇭',
+  'líbano': '🇱🇧', 'libano': '🇱🇧', 'lebanon': '🇱🇧',
 };
 
 function countryFlag(country) {
@@ -77,6 +78,7 @@ let aiData = null, aiLoading = false;
 let cropSrc = null, cropScale = 1, cropX = 0, cropY = 0, cropRotate = 0;
 let cropDragging = false, cropLastX = 0, cropLastY = 0, cropPinchDist = 0;
 let cropGridVisible = false;
+let cropGridColor = '#ffffff'; // white or orange
 
 // ── Firestore ──
 const capsCol  = ()       => collection(db, 'users', currentUser.uid, 'caps');
@@ -203,7 +205,7 @@ function buildApp() {
     <!-- Search -->
     <div style="padding:0 16px 8px;position:relative">
       <span style="position:absolute;left:28px;top:50%;transform:translateY(-50%);color:${T.muted};font-size:16px;pointer-events:none">🔍</span>
-      <input id="search-box" placeholder="Buscar nome, marca, cor ou país..." oninput="searchQ=this.value;renderList()"
+      <input id="search-box" data-search="list" placeholder="Buscar nome, marca, cor ou país..."
         style="width:100%;background:${T.card2};border:1.5px solid ${T.border};color:${T.text};border-radius:12px;padding:11px 14px 11px 40px;font-size:15px;outline:none;font-family:inherit;box-sizing:border-box"/>
     </div>
 
@@ -220,7 +222,7 @@ function buildApp() {
     <div style="padding:0 16px 10px;display:flex;gap:6px;align-items:center">
       <span style="font-size:11px;color:${T.muted};font-weight:700;white-space:nowrap">Ordenar:</span>
       <div style="display:flex;gap:4px;overflow-x:auto;scrollbar-width:none">
-        ${['recent','az','country','color','rarity'].map(s=>`<button data-sort="${s}" style="flex-shrink:0;padding:5px 10px;border-radius:8px;border:1px solid ${T.border};background:${T.card2};color:${T.muted};font-size:11px;font-weight:700;cursor:pointer;font-family:inherit">${{recent:'🕐 Recente',az:'🔤 A-Z',country:'🌍 País',color:'🎨 Cor',rarity:'⭐ Raridade'}[s]}</button>`).join('')}
+        ${['recent','az','country','color','type','rarity'].map(s=>`<button data-sort="${s}" style="flex-shrink:0;padding:5px 10px;border-radius:8px;border:1px solid ${T.border};background:${T.card2};color:${T.muted};font-size:11px;font-weight:700;cursor:pointer;font-family:inherit">${{recent:'🕐 Recente',az:'🔤 A-Z',country:'🌍 País',color:'🎨 Cor',type:'🥤 Tipo',rarity:'⭐ Raridade'}[s]}</button>`).join('')}
       </div>
     </div>
 
@@ -300,9 +302,10 @@ function buildApp() {
 
   <!-- CROP com rotação -->
   <div id="scr-crop" class="screen" style="display:none;padding-bottom:40px">
-    <div style="padding:52px 16px 14px;display:flex;align-items:center;gap:12px">
+    <div style="padding:52px 16px 14px;display:flex;align-items:center;gap:8px">
       <button data-action="goto-add" style="${btnIconStyle()}">←</button>
       <div style="flex:1;font-weight:800;font-size:18px">Ajustar Foto</div>
+      <button id="btn-grid-color" data-action="toggle-grid-color" style="display:none;background:${T.card};border:1px solid ${T.border};color:#fff;border-radius:10px;width:38px;height:38px;cursor:pointer;font-size:16px;display:none;align-items:center;justify-content:center">◐</button>
       <button id="btn-grid-toggle" data-action="toggle-grid" style="background:${T.card};border:1px solid ${T.border};color:${T.muted};border-radius:10px;width:38px;height:38px;cursor:pointer;font-size:16px;display:flex;align-items:center;justify-content:center">⊹</button>
     </div>
     <div style="font-size:12px;color:${T.muted};margin-bottom:14px;text-align:center;padding:0 16px">
@@ -812,9 +815,10 @@ function openCropScreen(src) {
   const newGrid = document.createElement('div');
   newGrid.id = 'crop-grid';
   newGrid.style.cssText = 'display:'+(cropGridVisible?'block':'none')+';position:absolute;inset:0;pointer-events:none;z-index:5';
+  const lineColor = cropGridColor === '#ffffff' ? 'rgba(255,255,255,.7)' : 'rgba(255,140,0,.85)';
   newGrid.innerHTML = `
-    <div style="position:absolute;left:50%;top:0;bottom:0;width:0;border-left:1.5px dashed rgba(255,255,255,.55);transform:translateX(-50%)"></div>
-    <div style="position:absolute;top:50%;left:0;right:0;height:0;border-top:1.5px dashed rgba(255,255,255,.55);transform:translateY(-50%)"></div>`;
+    <div style="position:absolute;left:50%;top:0;bottom:0;width:0;border-left:1.5px dashed ${lineColor};transform:translateX(-50%)"></div>
+    <div style="position:absolute;top:50%;left:0;right:0;height:0;border-top:1.5px dashed ${lineColor};transform:translateY(-50%)"></div>`;
   wrap.appendChild(newGrid);
 
   document.getElementById('crop-img').src=src;
@@ -827,6 +831,12 @@ function openCropScreen(src) {
     btn.style.color = cropGridVisible ? '#ff8c00' : '#7a6a58';
     btn.style.borderColor = cropGridVisible ? '#ff8c0055' : '#2e2618';
     btn.style.background = cropGridVisible ? '#ff8c0015' : '#1e1a16';
+  }
+  const colorBtn = document.getElementById('btn-grid-color');
+  if (colorBtn) {
+    colorBtn.style.display = cropGridVisible ? 'flex' : 'none';
+    colorBtn.style.color = cropGridColor;
+    colorBtn.textContent = cropGridColor === '#ffffff' ? '◐' : '◑';
   }
 
   goTo('crop');
@@ -947,11 +957,32 @@ function toggleCropGrid() {
   cropGridVisible = !cropGridVisible;
   const grid = document.getElementById('crop-grid');
   const btn  = document.getElementById('btn-grid-toggle');
+  const colorBtn = document.getElementById('btn-grid-color');
   if (grid) grid.style.display = cropGridVisible ? 'block' : 'none';
   if (btn) {
     btn.style.color = cropGridVisible ? '#ff8c00' : '#7a6a58';
     btn.style.borderColor = cropGridVisible ? '#ff8c0055' : '#2e2618';
     btn.style.background = cropGridVisible ? '#ff8c0015' : '#1e1a16';
+  }
+  if (colorBtn) colorBtn.style.display = cropGridVisible ? 'flex' : 'none';
+}
+
+function toggleCropGridColor() {
+  cropGridColor = cropGridColor === '#ffffff' ? '#ff8c00' : '#ffffff';
+  applyCropGridColor();
+}
+
+function applyCropGridColor() {
+  const grid = document.getElementById('crop-grid');
+  const colorBtn = document.getElementById('btn-grid-color');
+  if (grid) {
+    grid.querySelectorAll('div').forEach(line => {
+      line.style.borderColor = cropGridColor === '#ffffff' ? 'rgba(255,255,255,.7)' : 'rgba(255,140,0,.85)';
+    });
+  }
+  if (colorBtn) {
+    colorBtn.style.color = cropGridColor;
+    colorBtn.textContent = cropGridColor === '#ffffff' ? '◐' : '◑';
   }
 }
 
@@ -1059,6 +1090,7 @@ function getFilteredSorted() {
   if (activeSort === 'az')      result.sort((a,b) => a.name.localeCompare(b.name));
   if (activeSort === 'country') result.sort((a,b) => (a.country||'').localeCompare(b.country||''));
   if (activeSort === 'color')   result.sort((a,b) => (a.color||'').localeCompare(b.color||''));
+  if (activeSort === 'type')    result.sort((a,b) => (a.type||'').localeCompare(b.type||''));
   if (activeSort === 'rarity') {
     const order = {unica:0, muito_rara:1, rara:2, normal:3};
     result.sort((a,b) => (order[a.rarity||'normal']||3) - (order[b.rarity||'normal']||3));
@@ -1096,6 +1128,7 @@ function updateSortButtons() {
 function groupKeyFor(cap) {
   if (activeSort === 'country') return cap.country || 'Sem país';
   if (activeSort === 'color')   return cap.color   || 'Sem cor';
+  if (activeSort === 'type')    return cap.type    || 'Sem tipo';
   if (activeSort === 'rarity')  return {normal:'⚪ Normal',rara:'🟡 Rara',muito_rara:'🟠 Muito Rara',unica:'🔴 Única'}[cap.rarity||'normal'];
   return null; // no grouping for 'recent' and 'az'
 }
@@ -1119,7 +1152,7 @@ function renderList() {
     return;
   }
 
-  const groupable = ['country', 'color', 'rarity'].includes(activeSort);
+  const groupable = ['country', 'color', 'type', 'rarity'].includes(activeSort);
 
   if (!groupable) {
     // No grouping — render flat (recent / az)
@@ -1620,7 +1653,7 @@ function renderMap() {
     'América do Norte': ['estados unidos','eua','usa','canadá','méxico','mexico'],
     'América Central/Caribe': ['cuba','jamaica','panamá','costa rica','república dominicana'],
     'Europa': ['alemanha','espanha','frança','itália','portugal','holanda','bélgica','irlanda','reino unido','rússia','dinamarca','suécia','noruega','república tcheca','suíça','escócia','áustria','polônia','grécia'],
-    'Ásia': ['china','japão','coreia','tailândia','índia','vietnã','indonésia'],
+    'Ásia': ['china','japão','coreia','tailândia','índia','vietnã','indonésia','líbano','libano','lebanon'],
     'África': ['áfrica do sul','egito','marrocos','nigéria'],
     'Oceania': ['austrália','nova zelândia'],
   };
@@ -1826,7 +1859,8 @@ document.addEventListener('click', function(e) {
     case 'rotate-left':  rotateCrop(-1); return;
     case 'rotate-right': rotateCrop(1); return;
     case 'reset-crop':   resetCrop(); return;
-    case 'toggle-grid':  toggleCropGrid(); return;
+    case 'toggle-grid':       toggleCropGrid(); return;
+    case 'toggle-grid-color': toggleCropGridColor(); return;
     case 'save-key':     saveGeminiKey(); return;
     case 'logout':       logout(); return;
     case 'remove-photo':      pendingPhoto=null; pendingPhotoBase64=null; originalPhotoBase64=null; updatePhotoThumb(); return;
@@ -1953,6 +1987,12 @@ document.addEventListener('change', function(e) {
 });
 
 document.addEventListener('input', function(e) {
+  // list search
+  if (e.target.dataset.search === 'list') {
+    searchQ = e.target.value;
+    renderList();
+    return;
+  }
   // museum search
   if (e.target.id === 'museum-search') {
     museumSearchQ = e.target.value;
@@ -2468,6 +2508,6 @@ window.checkDuplicate=checkDuplicate; window.loadPhoto=loadPhoto;
 window.openCrop=openCrop; window.confirmCrop=confirmCrop; window.drawCrop=drawCrop;
 window.cropDown=cropDown; window.cropMove=cropMove; window.cropUp=cropUp;
 window.updatePhotoThumb=updatePhotoThumb; window.renderList=renderList;
-window.openLightbox=openLightbox; window.showConfirm=showConfirm; window.forceUpdate=forceUpdate; window.exportPDF=exportPDF; window.openCompare=openCompare; window.renderCompare=renderCompare; window.showComparePicker=showComparePicker; window.saveGeminiKey=saveGeminiKey; window.openPhotoOpt=openPhotoOpt; window.applyOptFilters=applyOptFilters; window.drawOptPreview=drawOptPreview; window.aiOptimizePhoto=aiOptimizePhoto; window.checkServerVersion=checkServerVersion; window.renderStats=renderStats; window.searchByPhoto=searchByPhoto; window.loadPsPhoto=loadPsPhoto; window.renderAchievements=renderAchievements; window.renderMap=renderMap; window.openMuseum=openMuseum; window.shareCap=shareCap; window.loadGeminiKey=loadGeminiKey; window.triggerCamera=triggerCamera; window.triggerGallery=triggerGallery; window.renderProfile=renderProfile; window.updateNavAvatar=updateNavAvatar; window.renderSettings=renderSettings;
+window.openLightbox=openLightbox; window.toggleCropGridColor=toggleCropGridColor; window.applyCropGridColor=applyCropGridColor; window.showConfirm=showConfirm; window.forceUpdate=forceUpdate; window.exportPDF=exportPDF; window.openCompare=openCompare; window.renderCompare=renderCompare; window.showComparePicker=showComparePicker; window.saveGeminiKey=saveGeminiKey; window.openPhotoOpt=openPhotoOpt; window.applyOptFilters=applyOptFilters; window.drawOptPreview=drawOptPreview; window.aiOptimizePhoto=aiOptimizePhoto; window.checkServerVersion=checkServerVersion; window.renderStats=renderStats; window.searchByPhoto=searchByPhoto; window.loadPsPhoto=loadPsPhoto; window.renderAchievements=renderAchievements; window.renderMap=renderMap; window.openMuseum=openMuseum; window.shareCap=shareCap; window.loadGeminiKey=loadGeminiKey; window.triggerCamera=triggerCamera; window.triggerGallery=triggerGallery; window.renderProfile=renderProfile; window.updateNavAvatar=updateNavAvatar; window.renderSettings=renderSettings;
 window.rotateCrop=rotateCrop; window.rotateCropTo=rotateCropTo; window.resetCrop=resetCrop;
 window.runAI=runAI; window.applyAI=applyAI; window.dismissAI=dismissAI;
